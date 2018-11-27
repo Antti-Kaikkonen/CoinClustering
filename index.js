@@ -1,6 +1,8 @@
 const level = require('level');
 var RpcClient = require('bitcoind-rpc');
 const config = require('./config');
+const EventEmitter = require('events');
+const { Writable, Readable } = require('stream');
 
 
 
@@ -168,16 +170,6 @@ async function addAddressesToCluster(addresses, clusterId) {
   });
 }
 
-db.get(db_next_cluster_id, (error, value) => {
-  if (value) {
-    next_cluster_id = value;
-  } else {
-    next_cluster_id = 0;
-  }
-  console.log("clusterID", next_cluster_id);
-  process();
-});
-
 async function getBlockByHash(hash) {
   return new Promise((resolve, reject) => {
     rpc.getBlock(hash, (error, ret) => {
@@ -234,6 +226,102 @@ async function getRawTransaction(txid) {
   });
 }
 
+
+const blockWriter = new Writable({
+  objectMode: true,
+  highWaterMark: 64,
+  write: async (block, encoding, callback) => {
+    await saveBlock(block);
+    //console.log(block.height, "saved");
+    callback(null, block);
+  }
+});
+
+class BlockReader extends Readable {
+
+
+  constructor(hash) {
+    super({
+      objectMode: true,
+      highWaterMark: 64,
+      read: async (size) => {
+        //console.log("read", size);
+        let block = await getBlockByHash(this.currentHash);
+        this.currentHash = block.nextblockhash;
+        this.push(block);
+      }
+    });
+    this.currentHash = hash;
+  }
+};  
+
+
+
+db.get(db_next_cluster_id, (error, value) => {
+  if (value) {
+    next_cluster_id = value;
+  } else {
+    next_cluster_id = 0;
+  }
+  rpc.getBlockHash(1, (error, ret) => {
+    let blockReader = new BlockReader(ret.result);
+    blockReader.pipe(blockWriter);
+  });
+});
+
+async function saveBlock(block) {
+  if (block.height%1000 === 0) console.log(block.height);
+  currentHash = block.nextblockhash;
+  let rawtxs = await getRawTransactions(block.tx);
+  let txs = await decodeRawTransactions(rawtxs);
+  for (let tx of txs) {
+    //let rawtx = await getRawTransaction(txid);
+    //let tx = await decodeRawTransaction(rawtx);
+    if (isMixingTx(tx)) continue;
+    let clusterAddresses = Array.from(new Set( tx.vin.map(vin => vin.address).filter(address => address !== undefined) ));
+    let promises = [];
+    for (let address of clusterAddresses) {
+      let promise = new Promise((resolve, reject) => {
+        db.get(db_address_cluster_prefix+address, (error, clusterId) => {
+          if (clusterId) {
+            db.get(db_cluster_address_count_prefix+clusterId, (error, clusterSize) => {
+              resolve({address: address, clusterId: clusterId, clusterSize: clusterSize});
+            });
+          } else {
+            resolve({address: address, clusterSize: 0});
+          }
+        });
+      });
+      promises.push(promise);
+    }
+    let values = await Promise.all(promises);
+
+    
+    let biggestCluster = values.reduce((a, b) => {
+      if (a.clusterSize > b.clusterSize) {
+        return a;
+      } else {
+        return b;
+      }  
+    }, {clusterSize:0});
+
+
+    let clusterIds = Array.from(new Set( values.map(v => v.clusterId).filter(clusterId => clusterId != undefined) ));
+    let nonClusterAddresses = values.filter(v => v.clusterId === undefined).map(v => v.address);
+
+    if (biggestCluster.clusterId === undefined) {
+      await createClusterWithAddresses(nonClusterAddresses);
+    } else {
+      let fromClusters = clusterIds.filter(clusterId => clusterId !== biggestCluster.clusterId);
+      for (let fromCluster of fromClusters) {
+        console.log("merging cluster "+ fromCluster +" to "+biggestCluster.clusterId);
+        await mergeClusters(fromCluster, biggestCluster.clusterId);
+      }
+      await addAddressesToCluster(nonClusterAddresses, biggestCluster.clusterId);
+    }
+  }
+}
+
 async function process() {
   rpc.getBlockHash(1, async (error, ret) => {
     let currentHash = ret.result;
@@ -243,6 +331,8 @@ async function process() {
       currentHash = block.nextblockhash;
       let rawtxs = await getRawTransactions(block.tx);
       let txs = await decodeRawTransactions(rawtxs);
+      //blockReader.push(block);
+      //myEE.emit("block", block);
       for (let tx of txs) {
         //let rawtx = await getRawTransaction(txid);
         //let tx = await decodeRawTransaction(rawtx);

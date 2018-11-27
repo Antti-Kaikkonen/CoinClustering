@@ -196,6 +196,35 @@ async function decodeRawTransaction(rawtx) {
   });
 }
 
+async function decodeRawTransactions(rawtxs) {
+
+  let batchCall = () => {
+    rawtxs.forEach(rawtx => rpc.decodeRawTransaction(rawtx));
+  }
+
+  return new Promise((resolve, reject) => {
+    rpc.batch(batchCall, (err, txs) => {
+      if (err) reject(err)
+      else resolve(txs.map(tx => tx.result));
+    });
+  });
+
+}
+
+async function getRawTransactions(txids) {
+
+  let batchCall = () => {
+    txids.forEach(txid => rpc.getRawTransaction(txid));
+  }
+
+  return new Promise((resolve, reject) => {
+    rpc.batch(batchCall, (err, rawtxs) => {
+      if (err) reject(err)
+      else resolve(rawtxs.map(rawtx => rawtx.result));
+    });
+  });  
+}
+
 async function getRawTransaction(txid) {
   return new Promise((resolve, reject) => {
     rpc.getRawTransaction(txid, function(error, ret) {
@@ -212,9 +241,11 @@ async function process() {
       let block = await getBlockByHash(currentHash);
       if (block.height%1000 === 0) console.log(block.height);
       currentHash = block.nextblockhash;
-      for (let txid of block.tx) {
-        let rawtx = await getRawTransaction(txid);
-        let tx = await decodeRawTransaction(rawtx);
+      let rawtxs = await getRawTransactions(block.tx);
+      let txs = await decodeRawTransactions(rawtxs);
+      for (let tx of txs) {
+        //let rawtx = await getRawTransaction(txid);
+        //let tx = await decodeRawTransaction(rawtx);
         if (isMixingTx(tx)) continue;
         let clusterAddresses = Array.from(new Set( tx.vin.map(vin => vin.address).filter(address => address !== undefined) ));
         let promises = [];

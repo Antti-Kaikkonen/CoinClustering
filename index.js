@@ -251,23 +251,42 @@ async function process() {
         let promises = [];
         for (let address of clusterAddresses) {
           let promise = new Promise((resolve, reject) => {
-            db.get(db_address_cluster_prefix+address, function(error, value) {
-              resolve({address: address, clusterid: value});
+            db.get(db_address_cluster_prefix+address, (error, clusterId) => {
+              if (clusterId) {
+                db.get(db_cluster_address_count_prefix+clusterId, (error, clusterSize) => {
+                  resolve({address: address, clusterId: clusterId, clusterSize: clusterSize});
+                });
+              } else {
+                resolve({address: address, clusterSize: 0});
+              }
             });
           });
           promises.push(promise);
         }
         let values = await Promise.all(promises);
-        let clusterIds = Array.from(new Set( values.map(v => v.clusterid).filter(clusterId => clusterId != undefined) ));
+
+        
+        let biggestCluster = values.reduce((a, b) => {
+          if (a.clusterSize > b.clusterSize) {
+            return a;
+          } else {
+            return b;
+          }  
+        }, {clusterSize:0});
+
+
+        let clusterIds = Array.from(new Set( values.map(v => v.clusterId).filter(clusterId => clusterId != undefined) ));
         let nonClusterAddresses = values.filter(v => v.clusterId === undefined).map(v => v.address);
-        if (clusterIds.length === 0) {
+
+        if (biggestCluster.clusterId === undefined) {
           await createClusterWithAddresses(nonClusterAddresses);
         } else {
-          for (let i = 1; i < clusterIds.length; i++) {
-            console.log("merging cluster "+ clusterIds[i] +" to "+clusterIds[0]);
-            await mergeClusters(clusterIds[i], clusterIds[0]);
+          let fromClusters = clusterIds.filter(clusterId => clusterId !== biggestCluster.clusterId);
+          for (let fromCluster of fromClusters) {
+            console.log("merging cluster "+ fromCluster +" to "+biggestCluster.clusterId);
+            await mergeClusters(fromCluster, biggestCluster.clusterId);
           }
-          await addAddressesToCluster(nonClusterAddresses, clusterIds[0]);
+          await addAddressesToCluster(nonClusterAddresses, biggestCluster.clusterId);
         }
       }
     }

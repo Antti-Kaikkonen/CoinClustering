@@ -1,4 +1,10 @@
 const level = require('level');
+var RpcClient = require('bitcoind-rpc');
+const config = require('./config');
+
+
+
+var rpc = new RpcClient(config);
 
 const db = level('./database', 
 { 
@@ -8,11 +14,232 @@ const db = level('./database',
   writeBufferSize: 4*1024*1024 
 });
 
-db.put("test", "testvalue",  (err) => {
-  if (err) return console.log('error1!', err) // some kind of I/O error
-  
-  db.get("test", (err2, value) => {
-    if (err2) return console.log('error2!', err2)
-    console.log("value", value);
+
+const db_cluster_transaction_prefix = "cluster_tx/";
+const db_cluster_address_prefix = "cluster_address/";
+const db_cluster_transaction_count_prefix = "cluster_tx_count/";
+const db_cluster_address_count_prefix = "cluster_address_count/";
+const db_address_cluster_prefix = "address_cluster/";
+const db_next_cluster_id = "next_cluster_id/";
+
+let next_cluster_id;
+
+
+function isMixingTx(tx) {
+  if (tx.vin.length < 2) return false;
+  if (tx.vout.length !== tx.vin.length) return false;
+  let firstInput = tx.vin[0];
+  if (typeof firstInput.valueSat !== 'number') return false;
+  if (!tx.vin.every(vin => vin.valueSat === firstInput.valueSat)) return false;
+  if (!tx.vout.every(vout => vout.valueSat === firstInput.valueSat)) return false;
+  return true;
+}
+
+async function mergeClusters(fromClusterId, toClusterId) {
+
+  let addressCountPromise = new Promise(function(resolve, reject) {
+    db.get(db_cluster_address_count_prefix+toClusterId, (error, count) => {
+      if (error) reject(error)
+      else resolve(count);
+    });
   });
+
+  let addressesPromise = new Promise((resolve, reject) => {
+    let addresses = [];
+    db.createValueStream({
+      gte:db_cluster_address_prefix+fromClusterId+"/0",
+      lt:db_cluster_address_prefix+fromClusterId+"/z"
+    })
+    .on('data', function (data) {
+      addresses.push(data);
+    })
+    .on('error', function (err) {
+      reject(err);
+    })
+    .on('close', function () {
+      resolve(addresses);
+    })
+    .on('end', function () {
+    });
+  });
+
+  return new Promise(async (resolve, reject) => {
+    let values = await Promise.all([addressCountPromise, addressesPromise]);
+    let ops = [];
+    let count = values[0];
+    let addresses = values[1];
+    addresses.forEach((address, index) => {
+      let newIndex = count+index+1;
+      ops.push({
+        type:"put", 
+        key: db_cluster_address_prefix+toClusterId+"/"+newIndex, 
+        value:address
+      });
+      ops.push({
+        type:"del", 
+        key: db_cluster_address_prefix+fromClusterId+"/"+index
+      });
+      ops.push({
+        type:"put",
+        key:db_address_cluster_prefix+address,
+        value:toClusterId
+      });
+    });
+    ops.push({
+      type:"put", 
+      key: db_cluster_address_count_prefix+toClusterId, 
+      value:count+addresses.length
+    });
+    ops.push({
+      type:"del", 
+      key: db_cluster_address_count_prefix+fromClusterId
+    });
+    db.batch(ops, function(error) {
+      if (error) reject(error)
+      else resolve();
+    });
+  });
+}
+
+async function createClusterWithAddresses(addresses) {
+  return new Promise((resolve, reject) => {
+    let clusterId = next_cluster_id;
+    next_cluster_id++;
+    if (addresses.length === 0) resolve();
+    db.get
+    let ops = [];
+    ops.push({
+      type:"put",
+      key:db_next_cluster_id,
+      value:next_cluster_id
+    });
+    ops.push({
+      type:"put",
+      key:db_cluster_address_count_prefix+clusterId,
+      value:addresses.length
+    });
+    addresses.forEach((address, index) => {
+      ops.push({
+        type: "put",
+        key: db_cluster_address_prefix+clusterId+"/"+index,
+        value: address
+      });
+      ops.push({
+        type: "put",
+        key: db_address_cluster_prefix+address,
+        value: clusterId
+      });
+    });
+    db.batch(ops, function(error) {
+      if (error) reject(error)
+      else resolve();
+    });
+  })
+}
+
+async function addAddressesToCluster(addresses, clusterId) {
+  return new Promise((resolve, reject) => {
+    if (addresses.length === 0) resolve();
+    db.get(db_cluster_address_count_prefix+clusterId, (error, count) => {
+      let ops = [];
+      ops.push({
+        type:"put",
+        key:db_cluster_address_count_prefix+clusterId,
+        value:count+addresses.length
+      });
+      addresses.forEach((address, index) => {
+        let newIndex = count+index+1;
+        ops.push({
+          type: "put",
+          key: db_cluster_address_prefix+clusterId+"/"+newIndex,
+          value: address
+        });
+        ops.push({
+          type: "put",
+          key: db_address_cluster_prefix+address,
+          value: clusterId
+        });
+      });
+      db.batch(ops, (error) => {
+        if (error) reject(error)
+        else resolve();
+      });
+    });
+  });
+}
+
+db.get(db_next_cluster_id, (error, value) => {
+  if (value) {
+    next_cluster_id = value;
+  } else {
+    next_cluster_id = 0;
+  }
+  console.log("clusterID", next_cluster_id);
+  process();
 });
+
+async function getBlockByHash(hash) {
+  return new Promise((resolve, reject) => {
+    rpc.getBlock(hash, (error, ret) => {
+      if (error) reject(error)
+      else resolve(ret.result);
+    });  
+  });
+}
+
+async function decodeRawTransaction(rawtx) {
+  return new Promise((resolve, reject) => {
+    rpc.decodeRawTransaction(rawtx, function(error, ret) {
+      if (error) reject(error)
+      else resolve(ret.result);
+    });  
+  });
+}
+
+async function getRawTransaction(txid) {
+  return new Promise((resolve, reject) => {
+    rpc.getRawTransaction(txid, function(error, ret) {
+      if (error) reject(error)
+      else resolve(ret.result);
+    });  
+  });
+}
+
+async function process() {
+  rpc.getBlockHash(1, async (error, ret) => {
+    let currentHash = ret.result;
+    while (currentHash !== undefined) {
+      let block = await getBlockByHash(currentHash);
+      if (block.height%1000 === 0) console.log(block.height);
+      currentHash = block.nextblockhash;
+      for (let txid of block.tx) {
+        let rawtx = await getRawTransaction(txid);
+        let tx = await decodeRawTransaction(rawtx);
+        if (isMixingTx(tx)) continue;
+        let clusterAddresses = Array.from(new Set( tx.vin.map(vin => vin.address).filter(address => address !== undefined) ));
+        let promises = [];
+        for (let address of clusterAddresses) {
+          let promise = new Promise((resolve, reject) => {
+            db.get(db_address_cluster_prefix+address, function(error, value) {
+              resolve({address: address, clusterid: value});
+            });
+          });
+          promises.push(promise);
+        }
+        let values = await Promise.all(promises);
+        let clusterIds = Array.from(new Set( values.map(v => v.clusterid).filter(clusterId => clusterId != undefined) ));
+        let nonClusterAddresses = values.filter(v => v.clusterId === undefined).map(v => v.address);
+        if (clusterIds.length === 0) {
+          await createClusterWithAddresses(nonClusterAddresses);
+        } else {
+          for (let i = 1; i < clusterIds.length; i++) {
+            console.log("merging cluster "+ clusterIds[i] +" to "+clusterIds[0]);
+            await mergeClusters(clusterIds[i], clusterIds[0]);
+          }
+          await addAddressesToCluster(nonClusterAddresses, clusterIds[0]);
+        }
+      }
+    }
+  });
+
+}

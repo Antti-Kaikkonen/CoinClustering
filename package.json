@@ -4,9 +4,10 @@
   "description": "Address clustering for bitcoin based cryptocurrencies",
   "main": "index.js",
   "scripts": {
-      "start": "node index.js"
+    "start": "node index.js"
   },
   "dependencies": {
+    "bitcoind-rpc": "^0.7.2",
     "express": "^4.16.3",
     "level": "^4.0.0"
   },

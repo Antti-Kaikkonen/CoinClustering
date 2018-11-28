@@ -4,14 +4,25 @@
   "description": "Address clustering for bitcoin based cryptocurrencies",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js"
+    "start": "ts-node index.ts",
+    "ts-node": "ts-node"
   },
   "dependencies": {
     "bitcoind-rpc": "^0.7.2",
-    "express": "^4.16.3",
-    "level": "^4.0.0"
+    "encoding-down": "^5.0.4",
+    "express": "^4.16.4",
+    "leveldown": "^4.0.1",
+    "levelup": "^3.1.1"
   },
-  "devDependencies": {},
+  "devDependencies": {
+    "@types/encoding-down": "^5.0.0",
+    "@types/leveldown": "^4.0.0",
+    "@types/es6-promise": "^3.3.0",
+    "@types/levelup": "^3.1.0",
+    "@types/node": "^10.12.10",
+    "ts-node": "^7.0.1",
+    "typescript": "^3.1.6"
+  },
   "author": "Antti Kaikkonen",
   "repository": {
     "type": "git",

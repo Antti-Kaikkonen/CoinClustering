@@ -1,20 +1,26 @@
-const level = require('level');
-var RpcClient = require('bitcoind-rpc');
-const config = require('./config');
-const EventEmitter = require('events');
-const { Writable, Readable } = require('stream');
+import 'core-js/library';
 
+import encoding from 'encoding-down';
+import leveldown from 'leveldown';
+import levelup from 'levelup';
+import { Readable, Writable } from 'stream';
+
+
+const config = require('./config');
+const RpcClient = require('bitcoind-rpc');
 
 
 var rpc = new RpcClient(config);
 
-const db = level('./database', 
+
+let db = levelup(encoding(leveldown('./db')));
+/*const db = level('./database', 
 { 
   valueEncoding: 'json', 
   cacheSize: 128*1024*1024, 
   blockSize: 4096, 
   writeBufferSize: 4*1024*1024 
-});
+});*/
 
 
 const db_cluster_transaction_prefix = "cluster_tx/";
@@ -24,7 +30,7 @@ const db_cluster_address_count_prefix = "cluster_address_count/";
 const db_address_cluster_prefix = "address_cluster/";
 const db_next_cluster_id = "next_cluster_id/";
 
-let next_cluster_id;
+let next_cluster_id: number;
 
 
 function isMixingTx(tx) {
@@ -37,17 +43,17 @@ function isMixingTx(tx) {
   return true;
 }
 
-async function mergeClusters(fromClusterId, toClusterId) {
+async function mergeClusters(fromClusterId: string, toClusterId: string) {
 
-  let addressCountPromise = new Promise(function(resolve, reject) {
+  let addressCountPromise = new Promise<any>(function(resolve, reject) {
     db.get(db_cluster_address_count_prefix+toClusterId, (error, count) => {
       if (error) reject(error)
       else resolve(count);
     });
   });
 
-  let addressesPromise = new Promise((resolve, reject) => {
-    let addresses = [];
+  let addressesPromise = new Promise<any>((resolve, reject) => {
+    let addresses: string[] = [];
     db.createValueStream({
       gte:db_cluster_address_prefix+fromClusterId+"/0",
       lt:db_cluster_address_prefix+fromClusterId+"/z"
@@ -65,7 +71,7 @@ async function mergeClusters(fromClusterId, toClusterId) {
     });
   });
 
-  return new Promise(async (resolve, reject) => {
+  return new Promise<any>(async (resolve, reject) => {
     let values = await Promise.all([addressCountPromise, addressesPromise]);
     let ops = [];
     let count = values[0];
@@ -103,8 +109,8 @@ async function mergeClusters(fromClusterId, toClusterId) {
   });
 }
 
-async function createClusterWithAddresses(addresses) {
-  return new Promise((resolve, reject) => {
+async function createClusterWithAddresses(addresses: string[]) {
+  return new Promise<any>((resolve, reject) => {
     let clusterId = next_cluster_id;
     next_cluster_id++;
     if (addresses.length === 0) resolve();
@@ -139,8 +145,8 @@ async function createClusterWithAddresses(addresses) {
   })
 }
 
-async function addAddressesToCluster(addresses, clusterId) {
-  return new Promise((resolve, reject) => {
+async function addAddressesToCluster(addresses: string[], clusterId: string) {
+  return new Promise<any>((resolve, reject) => {
     if (addresses.length === 0) resolve();
     db.get(db_cluster_address_count_prefix+clusterId, (error, count) => {
       let ops = [];
@@ -170,8 +176,8 @@ async function addAddressesToCluster(addresses, clusterId) {
   });
 }
 
-async function getBlockByHash(hash) {
-  return new Promise((resolve, reject) => {
+async function getBlockByHash(hash: string) {
+  return new Promise<any>((resolve, reject) => {
     rpc.getBlock(hash, (error, ret) => {
       if (error) reject(error)
       else resolve(ret.result);
@@ -180,21 +186,21 @@ async function getBlockByHash(hash) {
 }
 
 async function decodeRawTransaction(rawtx) {
-  return new Promise((resolve, reject) => {
-    rpc.decodeRawTransaction(rawtx, function(error, ret) {
+  return new Promise<any>((resolve, reject) => {
+    rpc.decodeRawTransaction(rawtx, (error, ret) => {
       if (error) reject(error)
       else resolve(ret.result);
     });  
   });
 }
 
-async function decodeRawTransactions(rawtxs) {
+async function decodeRawTransactions(rawtxs: any[]) {
 
   let batchCall = () => {
     rawtxs.forEach(rawtx => rpc.decodeRawTransaction(rawtx));
   }
 
-  return new Promise((resolve, reject) => {
+  return new Promise<any>((resolve, reject) => {
     rpc.batch(batchCall, (err, txs) => {
       if (err) reject(err)
       else resolve(txs.map(tx => tx.result));
@@ -203,13 +209,13 @@ async function decodeRawTransactions(rawtxs) {
 
 }
 
-async function getRawTransactions(txids) {
+async function getRawTransactions(txids: string[]) {
 
   let batchCall = () => {
     txids.forEach(txid => rpc.getRawTransaction(txid));
   }
 
-  return new Promise((resolve, reject) => {
+  return new Promise<any>((resolve, reject) => {
     rpc.batch(batchCall, (err, rawtxs) => {
       if (err) reject(err)
       else resolve(rawtxs.map(rawtx => rawtx.result));
@@ -217,8 +223,8 @@ async function getRawTransactions(txids) {
   });  
 }
 
-async function getRawTransaction(txid) {
-  return new Promise((resolve, reject) => {
+async function getRawTransaction(txid: string) {
+  return new Promise<any>((resolve, reject) => {
     rpc.getRawTransaction(txid, function(error, ret) {
       if (error) reject(error)
       else resolve(ret.result);
@@ -233,14 +239,16 @@ const blockWriter = new Writable({
   write: async (block, encoding, callback) => {
     await saveBlock(block);
     //console.log(block.height, "saved");
-    callback(null, block);
+    callback(null);
   }
 });
 
 class BlockReader extends Readable {
 
 
-  constructor(hash) {
+  currentHash: string;
+
+  constructor(hash: string) {
     super({
       objectMode: true,
       highWaterMark: 64,
@@ -271,7 +279,7 @@ db.get(db_next_cluster_id, (error, value) => {
 
 async function saveBlock(block) {
   if (block.height%1000 === 0) console.log(block.height);
-  currentHash = block.nextblockhash;
+  //currentHash = block.nextblockhash;
   let rawtxs = await getRawTransactions(block.tx);
   let txs = await decodeRawTransactions(rawtxs);
   for (let tx of txs) {
@@ -281,7 +289,7 @@ async function saveBlock(block) {
     let clusterAddresses = Array.from(new Set( tx.vin.map(vin => vin.address).filter(address => address !== undefined) ));
     let promises = [];
     for (let address of clusterAddresses) {
-      let promise = new Promise((resolve, reject) => {
+      let promise = new Promise<any>((resolve, reject) => {
         db.get(db_address_cluster_prefix+address, (error, clusterId) => {
           if (clusterId) {
             db.get(db_cluster_address_count_prefix+clusterId, (error, clusterSize) => {
@@ -340,7 +348,7 @@ async function process() {
         let clusterAddresses = Array.from(new Set( tx.vin.map(vin => vin.address).filter(address => address !== undefined) ));
         let promises = [];
         for (let address of clusterAddresses) {
-          let promise = new Promise((resolve, reject) => {
+          let promise = new Promise<any>((resolve, reject) => {
             db.get(db_address_cluster_prefix+address, (error, clusterId) => {
               if (clusterId) {
                 db.get(db_cluster_address_count_prefix+clusterId, (error, clusterSize) => {
@@ -365,7 +373,7 @@ async function process() {
         }, {clusterSize:0});
 
 
-        let clusterIds = Array.from(new Set( values.map(v => v.clusterId).filter(clusterId => clusterId != undefined) ));
+        let clusterIds = Array.from(new Set( values.map(v => v.clusterId).filter((clusterId: string) => clusterId != undefined) ));
         let nonClusterAddresses = values.filter(v => v.clusterId === undefined).map(v => v.address);
 
         if (biggestCluster.clusterId === undefined) {

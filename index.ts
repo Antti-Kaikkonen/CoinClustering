@@ -15,12 +15,12 @@ const db_cluster_address_count_prefix = "cluster_address_count/";//prefix/cluste
 const db_address_cluster_prefix = "address_cluster/";//prefix/address => clusterId
 
 const db_cluster_balance_prefix = "cluster_balance_event/";// prefix/clusterid/# => txid;balanceAfter (order # by 1:height, 2:index in block)
-const db_cluster_tx_balance_prefix = "cluster_tx_balance/";//prefix/clusterid/txid => #;balanceAfter
+const db_cluster_tx_balance_prefix = "cluster_tx_balance/";//prefix/clusterid/txid => #;balanceAfter;height;n
 const db_cluster_balance_count_prefix = "cluster_balance_count/";
 
 
-const db_address_balance_prefix = "address_balance/";// prefix/address/# => txid;balanceAfter (order # by 1:height, 2:index in block)
-const db_address_tx_balance_prefix = "address_tx_balance/";// prefix/address/txid => balanceAfter
+const db_address_balance_prefix = "address_balance/";// prefix/address/# => txid;balanceAfter;height;n (order # by 1:height, 2:index in block)
+const db_address_tx_balance_prefix = "address_tx_balance/";// prefix/address/txid => #;balanceAfter;height;n
 const db_address_balance_count_prefix = "address_balance_count/";
 
 const db_next_cluster_id = "next_cluster_id/";
@@ -54,12 +54,12 @@ function isMixingTx(tx) {
   return true;
 }
 
-async function mergeClusterTransactions(fromCluster: string, toCluster: string) {
-  let p1 = new Promise<{txid: string, balance: number, height: number, n: number}[]>((resolve, reject) => {
+async function getClusterTransactions(clusterId: string) {
+  return new Promise<{txid: string, balance: number, height: number, n: number}[]>((resolve, reject) => {
     let transactions = [];
     db.createValueStream({
-      gte:db_cluster_balance_prefix+fromCluster+"/0",
-      lt:db_cluster_balance_prefix+fromCluster+"/z"
+      gte:db_cluster_balance_prefix+clusterId+"/0",
+      lt:db_cluster_balance_prefix+clusterId+"/z"
     }).on("data", function(data) {
       let components = data.split(db_value_separator);
       transactions.push({ txid: components[0], balance:Number(components[1]), height:Number(components[2]), n:Number(components[3]) });
@@ -72,18 +72,21 @@ async function mergeClusterTransactions(fromCluster: string, toCluster: string) 
     })
     .on('end', function () {
     });
-  })
-  
-  let p2 = new Promise<{txid: string, balance: number, height: number, n: number}[]>((resolve, reject) => {
+  });
+}
+
+async function getClusterTxBalances(clusterId: string) {
+  return new Promise<{txid: string, balance: number, height: number, n: number}[]>((resolve, reject) => {
     let transactions = [];
     db.createValueStream({
-      gte:db_cluster_balance_prefix+toCluster+"/0",
-      lt:db_cluster_balance_prefix+toCluster+"/z"
+      gt:db_cluster_tx_balance_prefix+clusterId+"/",// ('/' < '0') is true
+      lt:db_cluster_tx_balance_prefix+clusterId+"0"
     }).on("data", function(data) {
       let components = data.split(db_value_separator);
       transactions.push({ txid: components[0], balance:Number(components[1]), height:Number(components[2]), n:Number(components[3]) });
     })
     .on('error', function (err) {
+      reject(err);
     })
     .on('close', function () {
       resolve(transactions);
@@ -91,7 +94,10 @@ async function mergeClusterTransactions(fromCluster: string, toCluster: string) 
     .on('end', function () {
     });
   });
-  let values = await Promise.all([p1, p2]);
+}
+
+async function mergeClusterTransactions(fromCluster: string, toCluster: string) {
+  let values = await Promise.all([getClusterTransactions(fromCluster), getClusterTransactions(toCluster)]);
   let transactionsFrom = values[0].map((value, index, arr) => { 
     let delta = index === 0 ? value.balance : value.balance-arr[index-1].balance;
     return {txid: value.txid, delta: delta, height: value.height, n: value.n};
@@ -103,7 +109,7 @@ async function mergeClusterTransactions(fromCluster: string, toCluster: string) 
   });
 
 
-  let combined = [];
+  let merged = [];
   let i1 = 0;
   let i2 = 0;
 
@@ -120,35 +126,46 @@ async function mergeClusterTransactions(fromCluster: string, toCluster: string) 
       )
     ) 
     {
-      combined.push(transactionsTo[i2]);
+      merged.push(transactionsTo[i2]);
       i2++;
     } else {
-      combined.push(transactionsFrom[i1]);
+      merged.push(transactionsFrom[i1]);
       i1++;
     } 
   }
   let balances = [];
-  balances[0] = combined[0].delta;
-  for (let i = 1; i < combined.length; i++) {
-    balances[i] = balances[i-1]+combined[i].delta;
+  balances[0] = merged[0].delta;
+  for (let i = 1; i < merged.length; i++) {
+    balances[i] = balances[i-1]+merged[i].delta;
   }
 
   let ops = [];
-  combined.forEach((tx, index) => ops.push({
-    type: "put",
-    key:db_cluster_balance_prefix+toCluster+"/"+integer2LexString(index),
-    value: cluster_balance_value(tx.txid, tx.delta, tx.height, tx.n)
-  }));
+  merged.forEach((tx, index) => {
+    ops.push({
+      type: "put",
+      key:db_cluster_balance_prefix+toCluster+"/"+integer2LexString(index),
+      value: cluster_balance_value(tx.txid, balances[index], tx.height, tx.n)
+    });
+    ops.push({
+      type: "put",
+      key:db_cluster_tx_balance_prefix+toCluster+"/"+tx.txid,
+      value: cluster_tx_balance_value(index, balances[index], tx.height, tx.n)
+    });
+  });
   transactionsFrom.forEach((tx, index) => {
     ops.push({
       type: "del",
       key:db_cluster_balance_prefix+fromCluster+"/"+integer2LexString(index)
     });
+    ops.push({
+      type: "del",
+      key:db_cluster_tx_balance_prefix+fromCluster+"/"+tx.txid
+    });
   });
   ops.push({
     type:"put",
     key:db_cluster_balance_count_prefix+toCluster,
-    value:combined.length
+    value:merged.length
   });
   ops.push({
     type:"del",
@@ -427,7 +444,6 @@ async function addressBalanceChangesToClusterBalanceChanges(addressToDelta: Map<
   return clusterToDelta;
 }
 
-
 async function getCurrentClusterBalance(clusterId: string) {
   return new Promise<{txid: string, balance: number, index: number}>((resolve, reject) => {
     let result;
@@ -443,7 +459,7 @@ async function getCurrentClusterBalance(clusterId: string) {
       let value: string = data.value;
       let valueComponents = value.split(db_value_separator);
       
-      result = {txid:valueComponents[0], balance:valueComponents[1]};
+      result = {txid:valueComponents[0], balance:valueComponents[1], index: index};
     })
     .on('error', function (err) {
       reject(err);
@@ -517,69 +533,82 @@ async function saveClusterBalanceChanges(txid: string, height: number, n: number
   return db.batch(ops);
 }
 
+function txAddressesToCluster(tx): Set<string> {
+  let result = new Set<string>();
+  if (isMixingTx(tx)) return result;
+  tx.vin.map(vin => vin.address).filter(address => address !== undefined).forEach(address => result.add(address));
+  return result;
+}
+
+function txAddresses(tx): Set<string> {
+  let result = new Set<string>();
+  tx.vin.map(vin => vin.address).filter(address => address !== undefined).forEach(address => result.add(address));
+  tx.vout.filter(vout => vout.scriptPubKey.addresses && vout.scriptPubKey.addresses.length === 1)
+  .map(vout => vout.scriptPubKey.addresses[0]).forEach(address => result.add(address));
+  return result;
+}
+
 async function saveBlock(block) {
   if (block.height%1000 === 0) console.log(block.height);
   //currentHash = block.nextblockhash;
   let rawtxs = await getRawTransactions(block.tx);
   let txs = await decodeRawTransactions(rawtxs);
   for (const [txindex, tx] of txs.entries()) {
-    if (isMixingTx(tx)) continue;
-    let inputAddresses = new Set<string>( tx.vin.map(vin => vin.address).filter(address => address !== undefined) );
-    let outputAddresses = new Set<string>( 
-      tx.vout.filter(vout => vout.scriptPubKey.addresses && vout.scriptPubKey.addresses.length === 1)
-      .map(vout => vout.scriptPubKey.addresses[0]) 
-    );
-    let allAddresses = new Set<string>([...inputAddresses, ...outputAddresses]);
-    //TODO: Create 1 address cluster for outputs
+    let allAddresses = txAddresses(tx);
+    let addressesToCluster = txAddressesToCluster(tx);
+    let addressesNotToCluster = new Set([...allAddresses].filter(x => !addressesToCluster.has(x)));
 
     let addressToClusterPromises = [];
+
     for (let address of allAddresses) {
-      let promise = new Promise<{address: string, clusterSize: number, clusterId?: string}>((resolve, reject) => {
+      let promise = new Promise<{address: string, cluster?: {size: number, id: string}}>((resolve, reject) => {
         db.get(db_address_cluster_prefix+address, (error, clusterId: string) => {
-          if (clusterId) {
+          if (addressesToCluster.has(address) && clusterId) {
             db.get(db_cluster_address_count_prefix+clusterId, (error, clusterSize) => {
-              resolve({address: address, clusterId: clusterId, clusterSize: clusterSize});
+              resolve(
+                { address: address, cluster: { size: clusterSize, id: clusterId } }
+              );
             });
           } else {
-            resolve({address: address, clusterSize: 0});
+            resolve({address: address});
           }
         });
       });
       addressToClusterPromises.push(promise);
     }
-    let addressToClusterArr = await Promise.all(addressToClusterPromises);
-    let addressToClusterInputs = addressToClusterArr.filter(v => inputAddresses.has(v.address));
-    let outputAddressesWithoutCluster = addressToClusterArr
-    .filter(v => v.clusterId === undefined && outputAddresses.has(v.address) && !inputAddresses.has(v.address))
-    .map(v => v.address);
-    await Promise.all(outputAddressesWithoutCluster.map(address => createClusterWithAddresses([address])));
+    let addressesWithClusterInfo = await Promise.all(addressToClusterPromises);
 
-    let biggestCluster = addressToClusterInputs.reduce((a, b) => {
-      if (a.clusterSize > b.clusterSize) {
+    let singleAddressClustersToCreate = addressesWithClusterInfo
+    .filter(v => v.cluster === undefined && addressesNotToCluster.has(v.address))
+    .map(v => v.address);
+    await Promise.all(singleAddressClustersToCreate.map(address => createClusterWithAddresses([address])));//TODO: use db.batch()
+
+    let addressesWithClustersToCluster = addressesWithClusterInfo.filter(v => addressesToCluster.has(v.address));
+
+    let biggestCluster = addressesWithClustersToCluster.filter(e => e.cluster !== undefined).reduce((a, b) => {
+      if (a.cluster.size > b.cluster.size) {
         return a;
       } else {
         return b;
       }  
-    }, {clusterSize:0});
+    }, {cluster:{size:0}});
 
-    let clusterIds = Array.from(new Set( addressToClusterInputs.map(v => v.clusterId).filter(clusterId => clusterId != undefined) ));
-    let nonClusterAddresses = addressToClusterInputs.filter(v => v.clusterId === undefined).map(v => v.address);
+    let clusterIds = Array.from(new Set( addressesWithClustersToCluster.filter(v => v.clusterId !== undefined).map(v => v.clusterId) ));
+    let nonClusterAddresses = addressesWithClustersToCluster.filter(v => v.clusterId === undefined).map(v => v.address);
 
-    if (biggestCluster.clusterId === undefined) {
+    if (biggestCluster.cluster.id === undefined) {
       await createClusterWithAddresses(nonClusterAddresses);
     } else {
-      let fromClusters = clusterIds.filter(clusterId => clusterId !== biggestCluster.clusterId);
+      let fromClusters = clusterIds.filter(clusterId => clusterId !== biggestCluster.cluster.id);
       for (let fromCluster of fromClusters) {
         //console.log("merging cluster "+ fromCluster +" to "+biggestCluster.clusterId);
-        await mergeClusterAddresses(fromCluster, biggestCluster.clusterId);
-        await mergeClusterTransactions(fromCluster, biggestCluster.clusterId);
+        await mergeClusterAddresses(fromCluster, biggestCluster.cluster.id);
+        await mergeClusterTransactions(fromCluster, biggestCluster.cluster.id);
       }
-      await addAddressesToCluster(nonClusterAddresses, biggestCluster.clusterId);
+      await addAddressesToCluster(nonClusterAddresses, biggestCluster.cluster.id);
     }
     let addressBalanceChanges = getTransactionAddressBalanceChanges(tx);
-    //TODO save addressBalanceChanges
     let clusterBalanceChanges = await addressBalanceChangesToClusterBalanceChanges(addressBalanceChanges);
     await saveClusterBalanceChanges(tx.txid, block.height, txindex, clusterBalanceChanges);
-    //TODO save clusterBalanceChanges
   }
 }

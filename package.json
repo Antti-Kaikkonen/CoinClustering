@@ -2,9 +2,8 @@
   "name": "coin-clustering",
   "version": "0.0.1",
   "description": "Address clustering for bitcoin based cryptocurrencies",
-  "main": "index.js",
   "scripts": {
-    "start": "ts-node index.ts",
+    "start": "ts-node src/app.ts",
     "ts-node": "ts-node"
   },
   "dependencies": {

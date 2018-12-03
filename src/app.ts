@@ -1,8 +1,10 @@
 import encoding from 'encoding-down';
+import express from 'express';
 import leveldown from 'leveldown';
 import levelup from 'levelup';
 import { Readable, Writable } from 'stream';
 
+import { ClusterController } from './app/controllers/cluster-controller';
 import { ClusterAddressService } from './app/services/cluster-address-service';
 import { ClusterBalanceService } from './app/services/cluster-balance-service';
 
@@ -17,7 +19,15 @@ let clusterBalanceService = new ClusterBalanceService(db);
 
 let clusterAddressService = new ClusterAddressService(db);
 
-const db_cluster_address_prefix = "cluster_address/";//prefix/clusterId/# => address (no particular order)
+let clusterController = new ClusterController(clusterBalanceService, clusterAddressService);
+
+const app = express();
+app.get("/hello", clusterController.clusterCurrentBalances);
+app.get("/hello2", clusterController.clusterTransactions);
+app.get("/hello3", clusterController.clusterAddresses);
+app.get('/cluster_addresses/:id', clusterController.clusterAddresses);
+app.listen(3006);
+
 const db_cluster_address_count_prefix = "cluster_address_count/";//prefix/clusterId => count
 const db_address_cluster_prefix = "address_cluster/";//prefix/address => clusterId
 
@@ -100,11 +110,6 @@ class BlockReader extends Readable {
 };  
 
 
-rpc.getBlockHash(1, (error, ret) => {
-  let blockReader = new BlockReader(ret.result);
-  blockReader.pipe(blockWriter);
-});
-
 function getTransactionAddressBalanceChanges(tx): Map<string, number> {
   let addressToDelta = new Map<string, number>();
   tx.vin.filter(vin => vin.address)
@@ -157,6 +162,26 @@ function txAddresses(tx): Set<string> {
   return result;
 }
 
+async function getAddressClusterInfo(address: string) {
+  return new Promise<{address: string, cluster?: {size: number, id: string}}>((resolve, reject) => {
+    db.get(db_address_cluster_prefix+address, (error, clusterId: string) => {
+      if (clusterId) {
+        db.get(db_cluster_address_count_prefix+clusterId, (error, clusterSize) => {
+          resolve(
+            { address: address, cluster: { size: clusterSize, id: clusterId } }
+          );
+        });
+      } else {
+        resolve({address: address});
+      }
+    });
+  });
+}
+
+function getBiggestCluster() {
+
+}
+
 async function saveBlock(block) {
   if (block.height%1000 === 0) console.log(block.height);
   //currentHash = block.nextblockhash;
@@ -170,27 +195,17 @@ async function saveBlock(block) {
     let addressToClusterPromises = [];
 
     for (let address of allAddresses) {
-      let promise = new Promise<{address: string, cluster?: {size: number, id: string}}>((resolve, reject) => {
-        db.get(db_address_cluster_prefix+address, (error, clusterId: string) => {
-          if (addressesToCluster.has(address) && clusterId) {
-            db.get(db_cluster_address_count_prefix+clusterId, (error, clusterSize) => {
-              resolve(
-                { address: address, cluster: { size: clusterSize, id: clusterId } }
-              );
-            });
-          } else {
-            resolve({address: address});
-          }
-        });
-      });
-      addressToClusterPromises.push(promise);
+      addressToClusterPromises.push(getAddressClusterInfo(address));
     }
     let addressesWithClusterInfo = await Promise.all(addressToClusterPromises);
 
     let singleAddressClustersToCreate = addressesWithClusterInfo
     .filter(v => v.cluster === undefined && addressesNotToCluster.has(v.address))
     .map(v => v.address);
-    await Promise.all(singleAddressClustersToCreate.map(address => clusterAddressService.createClusterWithAddresses([address])));//TODO: use db.batch()
+    for (let address of singleAddressClustersToCreate) {
+      await clusterAddressService.createClusterWithAddresses([address]);//TODO batch
+    }
+    //await Promise.all(singleAddressClustersToCreate.map(address => clusterAddressService.createClusterWithAddresses([address])));//TODO: use db.batch()
 
     let addressesWithClustersToCluster = addressesWithClusterInfo.filter(v => addressesToCluster.has(v.address));
 
@@ -202,18 +217,19 @@ async function saveBlock(block) {
       }  
     }, {cluster:{size:0}});
 
-    let clusterIds = Array.from(new Set( addressesWithClustersToCluster.filter(v => v.clusterId !== undefined).map(v => v.clusterId) ));
-    let nonClusterAddresses = addressesWithClustersToCluster.filter(v => v.clusterId === undefined).map(v => v.address);
+    let clusterIds = Array.from(new Set( addressesWithClustersToCluster.filter(v => v.cluster !== undefined).map(v => v.cluster.id) ));
+    let nonClusterAddresses = addressesWithClustersToCluster.filter(v => v.cluster === undefined).map(v => v.address);
 
     if (biggestCluster.cluster.id === undefined) {
       await clusterAddressService.createClusterWithAddresses(nonClusterAddresses);
     } else {
       let fromClusters = clusterIds.filter(clusterId => clusterId !== biggestCluster.cluster.id);
+      if (fromClusters.length > 0) console.log("merging to",biggestCluster.cluster.id, "from ", fromClusters.join(","));
       for (let fromCluster of fromClusters) {
-        //console.log("merging cluster "+ fromCluster +" to "+biggestCluster.clusterId);
         await clusterAddressService.mergeClusterAddresses(fromCluster, biggestCluster.cluster.id);
         await clusterBalanceService.mergeClusterTransactions(fromCluster, biggestCluster.cluster.id);
       }
+      if (nonClusterAddresses.length > 0) console.log("nca", nonClusterAddresses);
       await clusterAddressService.addAddressesToCluster(nonClusterAddresses, biggestCluster.cluster.id);
     }
     let addressBalanceChanges = getTransactionAddressBalanceChanges(tx);
@@ -221,3 +237,9 @@ async function saveBlock(block) {
     await clusterBalanceService.saveClusterBalanceChanges(tx.txid, block.height, txindex, clusterBalanceChanges);
   }
 }
+
+
+rpc.getBlockHash(1, (error, ret) => {
+  let blockReader = new BlockReader(ret.result);
+  blockReader.pipe(blockWriter);
+});

@@ -165,7 +165,7 @@ function txAddresses(tx): Set<string> {
 async function getAddressClusterInfo(address: string) {
   return new Promise<{address: string, cluster?: {size: number, id: string}}>((resolve, reject) => {
     db.get(db_address_cluster_prefix+address, (error, clusterId: string) => {
-      if (clusterId) {
+      if (clusterId !== undefined) {
         db.get(db_cluster_address_count_prefix+clusterId, (error, clusterSize) => {
           resolve(
             { address: address, cluster: { size: clusterSize, id: clusterId } }
@@ -176,10 +176,6 @@ async function getAddressClusterInfo(address: string) {
       }
     });
   });
-}
-
-function getBiggestCluster() {
-
 }
 
 async function saveBlock(block) {
@@ -201,10 +197,11 @@ async function saveBlock(block) {
 
     let singleAddressClustersToCreate = addressesWithClusterInfo
     .filter(v => v.cluster === undefined && addressesNotToCluster.has(v.address))
-    .map(v => v.address);
-    for (let address of singleAddressClustersToCreate) {
+    .map(v => [v.address]);
+    await clusterAddressService.createMultipleAddressClusters(singleAddressClustersToCreate);
+    /*for (let address of singleAddressClustersToCreate) {
       await clusterAddressService.createClusterWithAddresses([address]);//TODO batch
-    }
+    }*/
     //await Promise.all(singleAddressClustersToCreate.map(address => clusterAddressService.createClusterWithAddresses([address])));//TODO: use db.batch()
 
     let addressesWithClustersToCluster = addressesWithClusterInfo.filter(v => addressesToCluster.has(v.address));

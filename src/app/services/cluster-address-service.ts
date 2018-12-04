@@ -90,16 +90,19 @@ export class ClusterAddressService {
 
   async addAddressesToCluster(addresses: string[], clusterId: string): Promise<void> {
     return new Promise<any>((resolve, reject) => {
-      if (addresses.length === 0) resolve();
+      if (addresses.length === 0) {
+        resolve();
+        return;
+      }  
       this.db.get(db_cluster_address_count_prefix+clusterId, (error, count) => {
         let ops = [];
         ops.push({
           type:"put",
           key:db_cluster_address_count_prefix+clusterId,
-          value:count+addresses.length
+          value:Number(count)+addresses.length
         });
         addresses.forEach((address, index) => {
-          let newIndex = count+index+1;
+          let newIndex = Number(count)+index+1;
           ops.push({
             type: "put",
             key: db_cluster_address_prefix+clusterId+"/"+integer2LexString(newIndex),
@@ -119,40 +122,45 @@ export class ClusterAddressService {
     });
   }
 
-  async createClusterWithAddresses(addresses: string[]): Promise<void> {
+  async createMultipleAddressClusters(clusters: Array<string[]>) {
     let next_cluster_id: number;
     try {
-      next_cluster_id = await this.db.get(db_next_cluster_id);
+      next_cluster_id = Number(await this.db.get(db_next_cluster_id));
     } catch (error) {
       next_cluster_id = 0;
     }
-    let clusterId = next_cluster_id;
-    next_cluster_id++;
-    if (addresses.length === 0) return;
     let ops = [];
+    clusters.forEach((clusterAddresses: string[]) => {
+      if (clusterAddresses.length === 0) return;
+      ops.push({
+        type:"put",
+        key:db_cluster_address_count_prefix+next_cluster_id,
+        value:clusterAddresses.length
+      });
+      clusterAddresses.forEach((address: string, index: number) => {
+        ops.push({
+          type: "put",
+          key: db_cluster_address_prefix+next_cluster_id+"/"+integer2LexString(index),
+          value: address
+        });
+        ops.push({
+          type: "put",
+          key: db_address_cluster_prefix+address,
+          value: next_cluster_id
+        });
+      });
+      next_cluster_id++;
+    });
     ops.push({
       type:"put",
       key:db_next_cluster_id,
       value:next_cluster_id
     });
-    ops.push({
-      type:"put",
-      key:db_cluster_address_count_prefix+clusterId,
-      value:addresses.length
-    });
-    addresses.forEach((address, index) => {
-      ops.push({
-        type: "put",
-        key: db_cluster_address_prefix+clusterId+"/"+integer2LexString(index),
-        value: address
-      });
-      ops.push({
-        type: "put",
-        key: db_address_cluster_prefix+address,
-        value: clusterId
-      });
-    });
     return this.db.batch(ops);
+  }
+
+  async createClusterWithAddresses(addresses: string[]): Promise<void> {
+    return this.createMultipleAddressClusters([addresses]);
   }
 
 }  

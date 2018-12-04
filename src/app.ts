@@ -1,15 +1,16 @@
+import RpcClient, { RpcClientOptions } from 'bitcoind-rpc';
 import encoding from 'encoding-down';
 import express from 'express';
 import leveldown from 'leveldown';
 import levelup from 'levelup';
 import { Readable, Writable } from 'stream';
-
 import { ClusterController } from './app/controllers/cluster-controller';
+import { BlockService } from './app/services/block-service';
 import { ClusterAddressService } from './app/services/cluster-address-service';
 import { ClusterBalanceService } from './app/services/cluster-balance-service';
 
-const config = require('../config');
-const RpcClient = require('bitcoind-rpc');
+const config: RpcClientOptions = require('../config');
+//const RpcClient = require('bitcoind-rpc');
 
 var rpc = new RpcClient(config);
 
@@ -18,6 +19,8 @@ let db = levelup(encoding(leveldown('./db')));
 let clusterBalanceService = new ClusterBalanceService(db);
 
 let clusterAddressService = new ClusterAddressService(db);
+
+let blockService = new BlockService(db, rpc);
 
 let clusterController = new ClusterController(clusterBalanceService, clusterAddressService);
 
@@ -232,6 +235,7 @@ async function saveBlock(block) {
     let addressBalanceChanges = getTransactionAddressBalanceChanges(tx);
     let clusterBalanceChanges = await addressBalanceChangesToClusterBalanceChanges(addressBalanceChanges);
     await clusterBalanceService.saveClusterBalanceChanges(tx.txid, block.height, txindex, clusterBalanceChanges);
+    await blockService.saveBlockHash(block.height, block.hash);
   }
 }
 

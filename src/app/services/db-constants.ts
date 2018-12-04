@@ -14,6 +14,8 @@ export const db_address_balance_count_prefix = "address_balance_count/";
 export const db_next_cluster_id = "next_cluster_id/";
 export const db_value_separator = ";";
 
+export const db_block_hash = "block_hash/";//prefix/height => hash
+
 //export {db_cluster_balance_prefix, db_value_separator };
 
 //export { db_cluster_address_prefix, db_cluster_address_count_prefix, db_address_cluster_prefix, db_cluster_balance_prefix, db_cluster_tx_balance_prefix, db_cluster_balance_count_prefix }

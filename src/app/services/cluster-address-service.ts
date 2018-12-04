@@ -8,10 +8,6 @@ import {
   db_next_cluster_id,
 } from './db-constants';
 
-console.log(db_cluster_address_prefix);
-console.log(db_cluster_address_count_prefix);
-console.log(db_address_cluster_prefix);
-console.log(db_next_cluster_id);
 
 export class ClusterAddressService {
 

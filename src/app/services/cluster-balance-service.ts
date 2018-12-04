@@ -1,19 +1,7 @@
 import { LevelUp } from 'levelup';
-
 import { ClusterBalance } from '../models/cluster-balance';
 import { integer2LexString } from '../utils/utils';
-import {
-  db_cluster_balance_count_prefix,
-  db_cluster_balance_prefix,
-  db_cluster_tx_balance_prefix,
-  db_value_separator,
-} from './db-constants';
-
-console.log(db_cluster_balance_prefix);
-
-console.log(db_cluster_tx_balance_prefix);
-
-console.log(db_cluster_balance_count_prefix);
+import { db_cluster_balance_count_prefix, db_cluster_balance_prefix, db_cluster_tx_balance_prefix, db_value_separator } from './db-constants';
 
 export class ClusterBalanceService {
   

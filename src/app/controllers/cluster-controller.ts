@@ -1,12 +1,11 @@
 import { Request, Response } from 'express';
-
 import { ClusterAddressService } from '../services/cluster-address-service';
 import { ClusterBalanceService } from '../services/cluster-balance-service';
+
 
 export class ClusterController {
 
   constructor(private clusterBalanceService: ClusterBalanceService, private clusterAddressService: ClusterAddressService) {
-
   }  
 
   clusterCurrentBalances = async (req: Request, res: Response) => {
@@ -26,14 +25,14 @@ export class ClusterController {
   };
 
   clusterTransactions = async (req:Request, res:Response) => {
-    let clusterId: number = req.query.id || 0;
-    let result = await this.clusterBalanceService.getClusterTransactions(""+clusterId);
+    let clusterId: number = Number(req.query.id) || 0;
+    let result = await this.clusterBalanceService.getClusterTransactions(clusterId);
     res.send(result);
   };
 
   clusterAddresses = async (req:Request, res:Response) => {
     let clusterId: number = Number(req.params.id);
-    let result = await this.clusterAddressService.getClusterAddresses(""+clusterId);
+    let result = await this.clusterAddressService.getClusterAddresses(clusterId);
     res.send(result);
   };
 

@@ -8,9 +8,9 @@ import { ClusterController } from './app/controllers/cluster-controller';
 import { BlockService } from './app/services/block-service';
 import { ClusterAddressService } from './app/services/cluster-address-service';
 import { ClusterBalanceService } from './app/services/cluster-balance-service';
+import { db_address_cluster_prefix } from './app/services/db-constants';
 
 const config: RpcClientOptions = require('../config');
-//const RpcClient = require('bitcoind-rpc');
 
 var rpc = new RpcClient(config);
 
@@ -30,10 +30,6 @@ app.get("/hello2", clusterController.clusterTransactions);
 app.get("/hello3", clusterController.clusterAddresses);
 app.get('/cluster_addresses/:id', clusterController.clusterAddresses);
 app.listen(3006);
-
-const db_cluster_address_count_prefix = "cluster_address_count/";//prefix/clusterId => count
-const db_address_cluster_prefix = "address_cluster/";//prefix/address => clusterId
-
 
 
 function isMixingTx(tx) {
@@ -56,26 +52,21 @@ async function getBlockByHash(hash: string) {
 }
 
 async function decodeRawTransactions(rawtxs: any[]) {
-
   let batchCall = () => {
     rawtxs.forEach(rawtx => rpc.decodeRawTransaction(rawtx));
   }
-
   return new Promise<any>((resolve, reject) => {
     rpc.batch(batchCall, (err, txs) => {
       if (err) reject(err)
       else resolve(txs.map(tx => tx.result));
     });
   });
-
 }
 
 async function getRawTransactions(txids: string[]) {
-
   let batchCall = () => {
     txids.forEach(txid => rpc.getRawTransaction(txid));
   }
-
   return new Promise<any>((resolve, reject) => {
     rpc.batch(batchCall, (err, rawtxs) => {
       if (err) reject(err)
@@ -86,7 +77,7 @@ async function getRawTransactions(txids: string[]) {
 
 const blockWriter = new Writable({
   objectMode: true,
-  highWaterMark: 64,
+  highWaterMark: 4,
   write: async (block, encoding, callback) => {
     await saveBlock(block);
     callback(null);
@@ -94,23 +85,27 @@ const blockWriter = new Writable({
 });
 
 class BlockReader extends Readable {
-
   currentHash: string;
-
   constructor(hash: string) {
     super({
       objectMode: true,
-      highWaterMark: 64,
+      highWaterMark: 32,
       read: async (size) => {
-        let block = await getBlockByHash(this.currentHash);
-        this.currentHash = block.nextblockhash;
-        this.push(block);
+        while (true) {
+          let block = await getBlockByHash(this.currentHash);
+          let rawtxs = await getRawTransactions(block.tx);
+          let txs = await decodeRawTransactions(rawtxs);
+          block.tx = txs;
+          this.currentHash = block.nextblockhash;
+          let shouldBreak = this.push(block);
+          break;//if (shouldBreak) break;//async push fixed in node 10 https://github.com/nodejs/node/pull/17979
+        }
+        
       }
     });
     this.currentHash = hash;
   }
 };  
-
 
 function getTransactionAddressBalanceChanges(tx): Map<string, number> {
   let addressToDelta = new Map<string, number>();
@@ -148,7 +143,6 @@ async function addressBalanceChangesToClusterBalanceChanges(addressToDelta: Map<
   return clusterToDelta;
 }
 
-
 function txAddressesToCluster(tx): Set<string> {
   let result = new Set<string>();
   if (isMixingTx(tx)) return result;
@@ -169,11 +163,6 @@ async function getAddressClusterInfo(address: string) {
     db.get(db_address_cluster_prefix+address, (error, clusterId: string) => {
       if (clusterId !== undefined) {
         resolve( { address: address, cluster: { id: Number(clusterId) }});
-        /*db.get(db_cluster_address_count_prefix+clusterId, (error, clusterSize) => {
-          resolve(
-            { address: address, cluster: { size: clusterSize, id: clusterId } }
-          );
-        });*/
       } else {
         resolve({address: address});
       }
@@ -183,10 +172,9 @@ async function getAddressClusterInfo(address: string) {
 
 async function saveBlock(block) {
   if (block.height%1000 === 0) console.log(block.height);
-  //currentHash = block.nextblockhash;
-  let rawtxs = await getRawTransactions(block.tx);
-  let txs = await decodeRawTransactions(rawtxs);
-  //if (0 === 0) return;
+  //let rawtxs = await getRawTransactions(block.tx);
+  let txs = block.tx;//await decodeRawTransactions(rawtxs);
+  //if (true) return;
   for (const [txindex, tx] of txs.entries()) {
     let allAddresses = txAddresses(tx);
     let addressesToCluster = txAddressesToCluster(tx);
@@ -203,20 +191,8 @@ async function saveBlock(block) {
     .filter(v => v.cluster === undefined && addressesNotToCluster.has(v.address))
     .map(v => [v.address]);
     await clusterAddressService.createMultipleAddressClusters(singleAddressClustersToCreate);
-    /*for (let address of singleAddressClustersToCreate) {
-      await clusterAddressService.createClusterWithAddresses([address]);//TODO batch
-    }*/
-    //await Promise.all(singleAddressClustersToCreate.map(address => clusterAddressService.createClusterWithAddresses([address])));//TODO: use db.batch()
 
     let addressesWithClustersToCluster = addressesWithClusterInfo.filter(v => addressesToCluster.has(v.address));
-
-    /*let biggestCluster = addressesWithClustersToCluster.filter(e => e.cluster !== undefined).reduce((a, b) => {
-      if (a.cluster.size > b.cluster.size) {
-        return a;
-      } else {
-        return b;
-      }  
-    }, {cluster:{size:0}});*/
 
     let clusterIds: number[] = Array.from(new Set( addressesWithClustersToCluster.filter(v => v.cluster !== undefined).map(v => v.cluster.id) ));
 
@@ -229,7 +205,6 @@ async function saveBlock(block) {
       }  
     } else {
       let toCluster: number = Math.min(...clusterIds);
-      //console.log("toCluster", toCluster);
       let fromClusters: number[] = clusterIds.filter(clusterId => clusterId !== toCluster);
       if (fromClusters.length > 0) console.log("merging to",toCluster, "from ", fromClusters.join(","));
       if (fromClusters.length > 0) {
@@ -249,7 +224,6 @@ async function saveBlock(block) {
   await blockService.saveBlockHash(block.height, block.hash);
 }
 
-
 process();
 
 async function process() {
@@ -267,4 +241,3 @@ async function process() {
     setTimeout(process, 1000);
   });
 }
-

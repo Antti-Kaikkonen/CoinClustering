@@ -1,8 +1,8 @@
 import RpcClient, { RpcClientOptions } from 'bitcoind-rpc';
 import encoding from 'encoding-down';
 import express from 'express';
-import leveldown from 'leveldown';
 import levelup from 'levelup';
+import rocksdb from 'rocksdb';
 import { Readable, Writable } from 'stream';
 import { ClusterController } from './app/controllers/cluster-controller';
 import { BlockService } from './app/services/block-service';
@@ -14,7 +14,7 @@ const config: RpcClientOptions = require('../config');
 
 var rpc = new RpcClient(config);
 
-let db = levelup(encoding(leveldown('./db')));
+let db = levelup(encoding(rocksdb('./db')));
 
 let clusterBalanceService = new ClusterBalanceService(db);
 

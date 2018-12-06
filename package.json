@@ -10,16 +10,16 @@
     "bitcoind-rpc": "^0.7.2",
     "encoding-down": "^5.0.4",
     "express": "^4.16.4",
-    "leveldown": "^4.0.1",
-    "levelup": "^3.1.1"
+    "levelup": "^3.1.1",
+    "rocksdb": "^3.0.2"
   },
   "devDependencies": {
     "@types/encoding-down": "^5.0.0",
     "@types/es6-promise": "^3.3.0",
     "@types/express": "^4.16.0",
-    "@types/leveldown": "^4.0.0",
     "@types/levelup": "^3.1.0",
     "@types/node": "^10.12.10",
+    "@types/rocksdb": "^3.0.0",
     "ts-node": "^7.0.1",
     "typescript": "^3.1.6"
   },

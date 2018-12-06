@@ -14,7 +14,7 @@ export class ClusterAddressService {
     return this.db.get(db_address_cluster_prefix+address);
   }
 
-  async getClusterAddresses(clusterId: string): Promise<string[]> {
+  async getClusterAddresses(clusterId: number): Promise<string[]> {
     return new Promise<any>((resolve, reject) => {
       let addresses: string[] = [];
       this.db.createValueStream({
@@ -35,7 +35,7 @@ export class ClusterAddressService {
     });
   }
 
-  async mergeClusterAddresses(toClusterId: string, ...fromClusterIds: string[]) {
+  async mergeClusterAddresses(toClusterId: number, ...fromClusterIds: number[]) {
     if (fromClusterIds.length === 0) return;
     let promises: Promise<any>[] = [];
     let addressCountPromise = new Promise<any>((resolve, reject) => {
@@ -54,7 +54,7 @@ export class ClusterAddressService {
     let ops = [];
     let nextIndex = Number(values[0]);
 
-    fromClusterIds.forEach((fromClusterId: string, index: number) => {
+    fromClusterIds.forEach((fromClusterId: number, index: number) => {
       let addresses: string[] = values[1+index];
       addresses.forEach((address: string, index: number) => {
         ops.push({
@@ -86,7 +86,7 @@ export class ClusterAddressService {
     return this.db.batch(ops);
   }
 
-  async addAddressesToCluster(addresses: string[], clusterId: string): Promise<void> {
+  async addAddressesToCluster(addresses: string[], clusterId: number): Promise<void> {
     return new Promise<any>((resolve, reject) => {
       if (addresses.length === 0) {
         resolve();

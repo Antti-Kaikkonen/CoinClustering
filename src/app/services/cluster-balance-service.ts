@@ -46,7 +46,7 @@ export class ClusterBalanceService {
     });
   }
 
-  async getClusterTransactions(clusterId: string): Promise<ClusterBalance[]> {
+  async getClusterTransactions(clusterId: number): Promise<ClusterBalance[]> {
     return new Promise<ClusterBalance[]>((resolve, reject) => {
       let transactions = [];
       this.db.createReadStream({
@@ -81,7 +81,7 @@ export class ClusterBalanceService {
     return index+db_value_separator+balance+db_value_separator+height+db_value_separator+n;
   }
 
-  async mergeClusterTransactions(toCluster: string, ...fromClusters: string[]) {
+  async mergeClusterTransactions(toCluster: number, ...fromClusters: number[]) {
     if (fromClusters.length === 0) return;
     let clusterTransactionPromises = [this.getClusterTransactions(toCluster), ...fromClusters.map(fromCluster => this.getClusterTransactions(fromCluster))];
     let values = await Promise.all(clusterTransactionPromises);
@@ -95,7 +95,7 @@ export class ClusterBalanceService {
     let ops = [];
 
     let merged = [...transactionsToWithDelta];
-    fromClusters.forEach((fromCluster: string, index: number) => {
+    fromClusters.forEach((fromCluster: number, index: number) => {
       let transactionsFrom = values[1+index].map((value: ClusterBalance, index: number, arr: ClusterBalance[]) => { 
         let delta = index === 0 ? value.balance : value.balance-arr[index-1].balance;
         return {id: value.id, txid: value.txid, delta: delta, height: value.height, n: value.n};

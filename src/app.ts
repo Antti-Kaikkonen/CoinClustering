@@ -165,14 +165,15 @@ function txAddresses(tx): Set<string> {
 }
 
 async function getAddressClusterInfo(address: string) {
-  return new Promise<{address: string, cluster?: {size: number, id: string}}>((resolve, reject) => {
+  return new Promise<{address: string, cluster?: {id: number}}>((resolve, reject) => {
     db.get(db_address_cluster_prefix+address, (error, clusterId: string) => {
       if (clusterId !== undefined) {
-        db.get(db_cluster_address_count_prefix+clusterId, (error, clusterSize) => {
+        resolve( { address: address, cluster: { id: Number(clusterId) }});
+        /*db.get(db_cluster_address_count_prefix+clusterId, (error, clusterSize) => {
           resolve(
             { address: address, cluster: { size: clusterSize, id: clusterId } }
           );
-        });
+        });*/
       } else {
         resolve({address: address});
       }
@@ -185,6 +186,7 @@ async function saveBlock(block) {
   //currentHash = block.nextblockhash;
   let rawtxs = await getRawTransactions(block.tx);
   let txs = await decodeRawTransactions(rawtxs);
+  //if (0 === 0) return;
   for (const [txindex, tx] of txs.entries()) {
     let allAddresses = txAddresses(tx);
     let addressesToCluster = txAddressesToCluster(tx);
@@ -208,33 +210,37 @@ async function saveBlock(block) {
 
     let addressesWithClustersToCluster = addressesWithClusterInfo.filter(v => addressesToCluster.has(v.address));
 
-    let biggestCluster = addressesWithClustersToCluster.filter(e => e.cluster !== undefined).reduce((a, b) => {
+    /*let biggestCluster = addressesWithClustersToCluster.filter(e => e.cluster !== undefined).reduce((a, b) => {
       if (a.cluster.size > b.cluster.size) {
         return a;
       } else {
         return b;
       }  
-    }, {cluster:{size:0}});
+    }, {cluster:{size:0}});*/
 
-    let clusterIds = Array.from(new Set( addressesWithClustersToCluster.filter(v => v.cluster !== undefined).map(v => v.cluster.id) ));
+    let clusterIds: number[] = Array.from(new Set( addressesWithClustersToCluster.filter(v => v.cluster !== undefined).map(v => v.cluster.id) ));
+
     let nonClusterAddresses = addressesWithClustersToCluster.filter(v => v.cluster === undefined).map(v => v.address);
 
-    if (biggestCluster.cluster.id === undefined) {
-      await clusterAddressService.createClusterWithAddresses(nonClusterAddresses);
+    if (clusterIds.length === 0) {
+      if (nonClusterAddresses.length > 0) {
+        console.log("creating cluster with "+nonClusterAddresses.length+" addresses");
+        await clusterAddressService.createClusterWithAddresses(nonClusterAddresses);
+      }  
     } else {
-      let fromClusters = clusterIds.filter(clusterId => clusterId !== biggestCluster.cluster.id);
-      if (fromClusters.length > 0) console.log("merging to",biggestCluster.cluster.id, "from ", fromClusters.join(","));
+      let toCluster: number = Math.min(...clusterIds);
+      //console.log("toCluster", toCluster);
+      let fromClusters: number[] = clusterIds.filter(clusterId => clusterId !== toCluster);
+      if (fromClusters.length > 0) console.log("merging to",toCluster, "from ", fromClusters.join(","));
       if (fromClusters.length > 0) {
-        await clusterAddressService.mergeClusterAddresses(biggestCluster.cluster.id, ...fromClusters);
-        await clusterBalanceService.mergeClusterTransactions(biggestCluster.cluster.id, ...fromClusters);
+        await clusterAddressService.mergeClusterAddresses(toCluster, ...fromClusters);
+        await clusterBalanceService.mergeClusterTransactions(toCluster, ...fromClusters);
       }
 
-      /*for (let fromCluster of fromClusters) {
-        await clusterAddressService.mergeClusterAddresses(biggestCluster.cluster.id, fromCluster);
-        await clusterBalanceService.mergeClusterTransactions(biggestCluster.cluster.id, fromCluster);
-      }*/
-      if (nonClusterAddresses.length > 0) console.log("nca", nonClusterAddresses);
-      await clusterAddressService.addAddressesToCluster(nonClusterAddresses, biggestCluster.cluster.id);
+      if (nonClusterAddresses.length > 0) {
+        console.log("adding addresses", nonClusterAddresses, "to cluster", toCluster);
+        await clusterAddressService.addAddressesToCluster(nonClusterAddresses, toCluster);
+      }   
     }
     let addressBalanceChanges = getTransactionAddressBalanceChanges(tx);
     let clusterBalanceChanges = await addressBalanceChangesToClusterBalanceChanges(addressBalanceChanges);

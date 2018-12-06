@@ -1,12 +1,7 @@
 import { LevelUp } from 'levelup';
-
 import { integer2LexString } from '../utils/utils';
-import {
-  db_address_cluster_prefix,
-  db_cluster_address_count_prefix,
-  db_cluster_address_prefix,
-  db_next_cluster_id,
-} from './db-constants';
+import { db_address_cluster_prefix, db_cluster_address_count_prefix, db_cluster_address_prefix, db_next_cluster_id } from './db-constants';
+
 
 
 export class ClusterAddressService {
@@ -40,46 +35,53 @@ export class ClusterAddressService {
     });
   }
 
-  async mergeClusterAddresses(fromClusterId: string, toClusterId: string) {
-
+  async mergeClusterAddresses(toClusterId: string, ...fromClusterIds: string[]) {
+    if (fromClusterIds.length === 0) return;
+    let promises: Promise<any>[] = [];
     let addressCountPromise = new Promise<any>((resolve, reject) => {
       this.db.get(db_cluster_address_count_prefix+toClusterId, (error, count) => {
         if (error) reject(error)
         else resolve(count);
       });
     });
+    promises.push(addressCountPromise);
   
-    let addressesPromise = this.getClusterAddresses(fromClusterId);
+    fromClusterIds.forEach(fromClusterId => {
+      promises.push(this.getClusterAddresses(fromClusterId));
+    });
   
-    let values = await Promise.all([addressCountPromise, addressesPromise]);
+    let values = await Promise.all(promises);
     let ops = [];
-    let count = Number(values[0]);
-    let addresses: string[] = values[1];
-    addresses.forEach((address: string, index: number) => {
-      let newIndex = count+index;
-      ops.push({
-        type:"put", 
-        key: db_cluster_address_prefix+toClusterId+"/"+integer2LexString(newIndex), 
-        value:address
+    let nextIndex = Number(values[0]);
+
+    fromClusterIds.forEach((fromClusterId: string, index: number) => {
+      let addresses: string[] = values[1+index];
+      addresses.forEach((address: string, index: number) => {
+        ops.push({
+          type:"put", 
+          key: db_cluster_address_prefix+toClusterId+"/"+integer2LexString(nextIndex), 
+          value:address
+        });
+        ops.push({
+          type:"del", 
+          key: db_cluster_address_prefix+fromClusterId+"/"+integer2LexString(index)
+        });
+        ops.push({
+          type:"put",
+          key:db_address_cluster_prefix+address,
+          value:toClusterId
+        });
+        nextIndex++;
       });
       ops.push({
         type:"del", 
-        key: db_cluster_address_prefix+fromClusterId+"/"+integer2LexString(index)
-      });
-      ops.push({
-        type:"put",
-        key:db_address_cluster_prefix+address,
-        value:toClusterId
+        key: db_cluster_address_count_prefix+fromClusterId
       });
     });
     ops.push({
       type:"put", 
       key: db_cluster_address_count_prefix+toClusterId, 
-      value: count+addresses.length
-    });
-    ops.push({
-      type:"del", 
-      key: db_cluster_address_count_prefix+fromClusterId
+      value: nextIndex
     });
     return this.db.batch(ops);
   }

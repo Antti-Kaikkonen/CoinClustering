@@ -46,7 +46,6 @@ function isMixingTx(tx) {
   return true;
 }
 
-
 async function getBlockByHash(hash: string) {
   return new Promise<any>((resolve, reject) => {
     rpc.getBlock(hash, (error, ret) => {
@@ -225,22 +224,41 @@ async function saveBlock(block) {
     } else {
       let fromClusters = clusterIds.filter(clusterId => clusterId !== biggestCluster.cluster.id);
       if (fromClusters.length > 0) console.log("merging to",biggestCluster.cluster.id, "from ", fromClusters.join(","));
-      for (let fromCluster of fromClusters) {
-        await clusterAddressService.mergeClusterAddresses(fromCluster, biggestCluster.cluster.id);
-        await clusterBalanceService.mergeClusterTransactions(fromCluster, biggestCluster.cluster.id);
+      if (fromClusters.length > 0) {
+        await clusterAddressService.mergeClusterAddresses(biggestCluster.cluster.id, ...fromClusters);
+        await clusterBalanceService.mergeClusterTransactions(biggestCluster.cluster.id, ...fromClusters);
       }
+
+      /*for (let fromCluster of fromClusters) {
+        await clusterAddressService.mergeClusterAddresses(biggestCluster.cluster.id, fromCluster);
+        await clusterBalanceService.mergeClusterTransactions(biggestCluster.cluster.id, fromCluster);
+      }*/
       if (nonClusterAddresses.length > 0) console.log("nca", nonClusterAddresses);
       await clusterAddressService.addAddressesToCluster(nonClusterAddresses, biggestCluster.cluster.id);
     }
     let addressBalanceChanges = getTransactionAddressBalanceChanges(tx);
     let clusterBalanceChanges = await addressBalanceChangesToClusterBalanceChanges(addressBalanceChanges);
     await clusterBalanceService.saveClusterBalanceChanges(tx.txid, block.height, txindex, clusterBalanceChanges);
-    await blockService.saveBlockHash(block.height, block.hash);
   }
+  await blockService.saveBlockHash(block.height, block.hash);
 }
 
 
-rpc.getBlockHash(1, (error, ret) => {
-  let blockReader = new BlockReader(ret.result);
+process();
+
+async function process() {
+  let tipInfo = await blockService.getTipInfo();
+  console.log("tipInfo", tipInfo);
+  if (tipInfo !== undefined && tipInfo.reorgDepth > 0) {
+    //TODO: process reorg
+    await process();
+    return;
+  }
+  let hash = await blockService.getRpcBlockHash(tipInfo !== undefined ? tipInfo.lastSavedHeight+1 : 1);
+  let blockReader = new BlockReader(hash);
   blockReader.pipe(blockWriter);
-});
+  blockWriter.on('close', () => {
+    setTimeout(process, 1000);
+  });
+}
+

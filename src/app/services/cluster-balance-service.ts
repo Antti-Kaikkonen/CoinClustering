@@ -81,57 +81,73 @@ export class ClusterBalanceService {
     return index+db_value_separator+balance+db_value_separator+height+db_value_separator+n;
   }
 
-  async mergeClusterTransactions(fromCluster: string, toCluster: string) {
-    let values = await Promise.all([this.getClusterTransactions(fromCluster), this.getClusterTransactions(toCluster)]);
-    let transactionsFrom = values[0].map((value: ClusterBalance, index: number, arr: ClusterBalance[]) => { 
+  async mergeClusterTransactions(toCluster: string, ...fromClusters: string[]) {
+    if (fromClusters.length === 0) return;
+    let clusterTransactionPromises = [this.getClusterTransactions(toCluster), ...fromClusters.map(fromCluster => this.getClusterTransactions(fromCluster))];
+    let values = await Promise.all(clusterTransactionPromises);
+    
+    let transactionsTo = values[0];
+    let transactionsToWithDelta = transactionsTo.map((value, index, arr) => { 
       let delta = index === 0 ? value.balance : value.balance-arr[index-1].balance;
       return {id: value.id, txid: value.txid, delta: delta, height: value.height, n: value.n};
     });
-  
-    let transactionsTo = values[1].map((value, index, arr) => { 
-      let delta = index === 0 ? value.balance : value.balance-arr[index-1].balance;
-      return {id: value.id, txid: value.txid, delta: delta, height: value.height, n: value.n};
-    });
-  
-  
-    let merged = [];
-    let i1 = 0;
-    let i2 = 0;
-  
-    //Merge two sorted arrays into one sorted array
-    while (i1 < transactionsFrom.length || i2 < transactionsTo.length) {
-      if (i1 < transactionsFrom.length && i2 < transactionsTo.length && transactionsFrom[i1].txid === transactionsTo[i2].txid) {
-        let tx = transactionsFrom[i1];
-        tx.delta = tx.delta+transactionsTo[i2].delta;
+
+    let ops = [];
+
+    let merged = [...transactionsToWithDelta];
+    fromClusters.forEach((fromCluster: string, index: number) => {
+      let transactionsFrom = values[1+index].map((value: ClusterBalance, index: number, arr: ClusterBalance[]) => { 
+        let delta = index === 0 ? value.balance : value.balance-arr[index-1].balance;
+        return {id: value.id, txid: value.txid, delta: delta, height: value.height, n: value.n};
+      });
+
+      merged.push(...transactionsFrom);
+      transactionsFrom.forEach((tx: any, index: number) => {
         merged.push(tx);
-        i1++;
-        i2++;
-      } else if (
-        i2 < transactionsTo.length &&
-          (i1 === transactionsFrom.length || 
-          transactionsTo[i2].height < transactionsFrom[i1].height || 
-          (
-            transactionsTo[i2].height === transactionsFrom[i1].height && 
-            transactionsTo[i2].n < transactionsFrom[i1].n
-          )
-        )
-      ) 
-      {
-        merged.push(transactionsTo[i2]);
-        i2++;
+        ops.push({
+          type: "del",
+          key:db_cluster_balance_prefix+fromCluster+"/"+integer2LexString(tx.id)
+        });
+        ops.push({
+          type: "del",
+          key:db_cluster_tx_balance_prefix+fromCluster+"/"+tx.txid
+        });
+      });
+      ops.push({
+        type:"del",
+        key:db_cluster_balance_count_prefix+fromCluster
+      });
+    });
+    merged.sort((a, b) => {
+      if (a.height === b.height && a.n === b.n) {
+        return 0;
+      } else if (a.height < b.height || (a.height === b.height && a.n < b.n)) {
+        return -1;
       } else {
-        merged.push(transactionsFrom[i1]);
-        i1++;
-      } 
+        return 1;
+      }
+    });
+    let i = 1;
+    while (i < merged.length) {//remove duplicates
+      if (merged[i].height === merged[i-1].height && merged[i].n === merged[i-1].n) {
+        merged[i-1].delta = merged[i-1].delta+merged[i].delta;
+        merged.splice(i, 1);
+      } else {
+        i++;
+      }
     }
+    
     let balances = [];
     balances[0] = merged[0].delta;
     for (let i = 1; i < merged.length; i++) {
       balances[i] = balances[i-1]+merged[i].delta;
     }
   
-    let ops = [];
     merged.forEach((tx, index: number) => {
+      if (transactionsTo.length > index && transactionsTo[index].txid === tx.txid && transactionsTo[index].balance === balances[index]) {
+        return;//already saved
+      } 
+
       ops.push({
         type: "put",
         key:db_cluster_balance_prefix+toCluster+"/"+integer2LexString(index),
@@ -143,24 +159,10 @@ export class ClusterBalanceService {
         value: this.cluster_tx_balance_value(index, balances[index], tx.height, tx.n)
       });
     });
-    transactionsFrom.forEach((tx: ClusterBalance, index: number) => {
-      ops.push({
-        type: "del",
-        key:db_cluster_balance_prefix+fromCluster+"/"+integer2LexString(tx.id)
-      });
-      ops.push({
-        type: "del",
-        key:db_cluster_tx_balance_prefix+fromCluster+"/"+tx.txid
-      });
-    });
     ops.push({
       type:"put",
       key:db_cluster_balance_count_prefix+toCluster,
       value:merged.length
-    });
-    ops.push({
-      type:"del",
-      key:db_cluster_balance_count_prefix+fromCluster
     });
   
     return this.db.batch(ops);

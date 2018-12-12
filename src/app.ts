@@ -89,10 +89,6 @@ class BlockReader extends Readable {
           let txs = await decodeRawTransactions(rawtxs);
           block.tx = txs;
           this.currentHash = block.nextblockhash;
-          console.log(JSON.stringify(block));
-          console.log();
-          console.log();
-          console.log();
           let shouldBreak = this.push(block);
           break;//if (shouldBreak) break;//async push fixed in node 10 https://github.com/nodejs/node/pull/17979
         }

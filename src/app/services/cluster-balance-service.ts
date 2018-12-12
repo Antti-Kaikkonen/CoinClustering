@@ -103,7 +103,6 @@ export class ClusterBalanceService {
 
       merged.push(...transactionsFrom);
       transactionsFrom.forEach((tx: any, index: number) => {
-        merged.push(tx);
         ops.push({
           type: "del",
           key:db_cluster_balance_prefix+fromCluster+"/"+integer2LexString(tx.id)

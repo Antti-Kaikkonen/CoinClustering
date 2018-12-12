@@ -146,6 +146,12 @@ describe('Save a blocks with 3 transactions', () => {
     expect(c1).to.equal(c2);
   });
 
+  it('address3 cluster should contain two addresses', async () => {
+    let c1 = await clusterAddressService.getAddressCluster("address3");
+    let addresses = await clusterAddressService.getClusterAddresses(c1);
+    expect(addresses).lengthOf(2);
+  });
+
   it('address1 cluster should not contain other addresses', async () => {
     let c1 = await clusterAddressService.getAddressCluster("address1");
     let addresses = await clusterAddressService.getClusterAddresses(c1);
@@ -163,6 +169,12 @@ describe('Save a blocks with 3 transactions', () => {
     let c = await clusterAddressService.getAddressCluster("address1");
     let balance = await clusterBalanceService.getBalance(c);
     expect(balance).to.equal(8);
+  });
+
+  it('address3 cluster should contain 3 transactions', async () => {
+    let c = await clusterAddressService.getAddressCluster("address3");
+    let transactions = await clusterBalanceService.getClusterTransactions(c);
+    expect(transactions).lengthOf(3);
   });
 
   it('address3 cluster balance should be 0', async () => {

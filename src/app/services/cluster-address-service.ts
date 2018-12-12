@@ -10,8 +10,9 @@ export class ClusterAddressService {
 
   }  
 
-  async getAddressCluster(address: string): Promise<string> {
-    return this.db.get(db_address_cluster_prefix+address);
+  async getAddressCluster(address: string): Promise<number> {
+    let clusterStr = await this.db.get(db_address_cluster_prefix+address);
+    return Number(clusterStr);
   }
 
   async getClusterAddresses(clusterId: number): Promise<string[]> {

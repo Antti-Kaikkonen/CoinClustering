@@ -24,10 +24,9 @@ describe('Save a blocks with 3 transactions', () => {
   let blockService: BlockService;
 
   let blockImportService: BlockImportService;
-
   before(async () => {
     await new Promise((resolve, reject) => {
-      rocksdb.destroy(dbpath, () => {
+      rocksdb['destroy'](dbpath, () => {
         resolve();
       });
     });
@@ -175,6 +174,13 @@ describe('Save a blocks with 3 transactions', () => {
     let c = await clusterAddressService.getAddressCluster("address3");
     let transactions = await clusterBalanceService.getClusterTransactions(c);
     expect(transactions).lengthOf(3);
+  });
+
+  it('address3 cluster transaction indexes should be [0, 1, 2]', async () => {
+    let c = await clusterAddressService.getAddressCluster("address3");
+    let transactions = await clusterBalanceService.getClusterTransactions(c);
+    let indexes = transactions.map(tx => tx.id);
+    expect(indexes).to.deep.equal([0, 1, 2]);
   });
 
   it('address3 cluster balance should be 0', async () => {

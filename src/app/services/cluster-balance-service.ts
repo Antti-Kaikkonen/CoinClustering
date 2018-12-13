@@ -5,13 +5,10 @@ import { db_cluster_balance_count_prefix, db_cluster_balance_prefix, db_cluster_
 
 export class ClusterBalanceService {
   
-
   constructor(private db: LevelUp) {
-
   }  
 
-
-  async getLast(clusterId: String): Promise<ClusterBalance> {
+  async getLast(clusterId: number): Promise<ClusterBalance> {
     
     return new Promise<ClusterBalance>((resolve, reject) => {
       let result: ClusterBalance;
@@ -40,9 +37,65 @@ export class ClusterBalanceService {
     });
   }
 
+  async getClusterTransaction(clusterId: number, index: number): Promise<ClusterBalance> {
+    let value = await this.db.get(db_cluster_balance_prefix+clusterId+"/"+integer2LexString(index));
+    let valueComponents = value.split(db_value_separator);
+    let cb = new ClusterBalance(index, valueComponents[0], Number(valueComponents[1]), Number(valueComponents[2]), Number(valueComponents[3]));
+    return cb;
+  }
+
   async getBalance(clusterId) {
     return new Promise<number>((resolve, reject) => {
       this.getLast(clusterId).then(clusterBalanace => resolve(clusterBalanace.balance));
+    });
+  }
+
+  async getClusterTransactionsAfter(clusterId: number, height: number, n: number): Promise<ClusterBalance[]> {
+    return new Promise<ClusterBalance[]>(async (resolve, reject) => {
+      let result: ClusterBalance[] = [];
+      let iter = this.db['iterator']({
+        gte:db_cluster_balance_prefix+clusterId+"/0",
+        lt:db_cluster_balance_prefix+clusterId+"/z",
+        reverse: true
+      });
+      while (true) {
+        let promise = new Promise<ClusterBalance>((resolve, reject) => {
+          iter.next((err, key: string, value: string) => {
+            if (err) {
+              reject(err);
+            } else {
+              if (value === undefined) {
+                resolve(undefined);
+              } else {
+                let index = Number(key.substr((db_cluster_balance_prefix+clusterId+"/").length));
+                let valueComponents = value.split(db_value_separator);
+                let cb = new ClusterBalance(index, valueComponents[0], Number(valueComponents[1]), Number(valueComponents[2]), Number(valueComponents[3]));
+                resolve(cb);
+              }
+            }
+          });
+        });
+        try {
+          let next = await promise;
+          if (next !== undefined && (next.height > height || next.height === height && next.n >= n)) {
+            result.push(next);
+          } else {
+            break;
+          }
+        } catch(err) {
+          reject(err);
+          iter.end((err) => {
+            console.log("iterator closed");
+          });
+          return;
+        }
+        
+      }
+      //console.log("merging to cluster with ", result.length, "addresses");
+      resolve(result);
+      iter.end((err) => {
+        //console.log("iterator closed");
+      });
     });
   }
 
@@ -83,20 +136,13 @@ export class ClusterBalanceService {
 
   async mergeClusterTransactions(toCluster: number, ...fromClusters: number[]) {
     if (fromClusters.length === 0) return;
-    let clusterTransactionPromises = [this.getClusterTransactions(toCluster), ...fromClusters.map(fromCluster => this.getClusterTransactions(fromCluster))];
-    let values = await Promise.all(clusterTransactionPromises);
+    let transactionsFromPromises = [...fromClusters.map(fromCluster => this.getClusterTransactions(fromCluster))];
+    let values = await Promise.all(transactionsFromPromises);
     
-    let transactionsTo = values[0];
-    let transactionsToWithDelta = transactionsTo.map((value, index, arr) => { 
-      let delta = index === 0 ? value.balance : value.balance-arr[index-1].balance;
-      return {id: value.id, txid: value.txid, delta: delta, height: value.height, n: value.n};
-    });
-
+    let merged = [];
     let ops = [];
-
-    let merged = [...transactionsToWithDelta];
     fromClusters.forEach((fromCluster: number, index: number) => {
-      let transactionsFrom = values[1+index].map((value: ClusterBalance, index: number, arr: ClusterBalance[]) => { 
+      let transactionsFrom = values[index].map((value: ClusterBalance, index: number, arr: ClusterBalance[]) => { 
         let delta = index === 0 ? value.balance : value.balance-arr[index-1].balance;
         return {id: value.id, txid: value.txid, delta: delta, height: value.height, n: value.n};
       });
@@ -117,6 +163,7 @@ export class ClusterBalanceService {
         key:db_cluster_balance_count_prefix+fromCluster
       });
     });
+
     merged.sort((a, b) => {
       if (a.height === b.height && a.n === b.n) {
         return 0;
@@ -135,37 +182,77 @@ export class ClusterBalanceService {
         i++;
       }
     }
-    
+    let transactionsTo = await this.getClusterTransactionsAfter(toCluster, merged[0].height, merged[0].n);//[0] = oldest.
+    transactionsTo = transactionsTo.reverse();
+    let oldBalance: number;
+    let skipped: number;
+    if (transactionsTo.length === 0) {
+      let asd = await this.getLast(toCluster);
+      oldBalance = asd.balance;
+      skipped = asd.id+1;
+      //console.log("skipped1", skipped);
+    } else {
+      if (transactionsTo[0].id === 0) {
+        oldBalance = 0;
+        skipped = 0;
+        //console.log("skipped2", skipped);
+      } else {
+        let asd = await this.getClusterTransaction(toCluster, transactionsTo[0].id-1);
+        oldBalance = asd.balance;
+        skipped = asd.id+1;
+        //console.log("skipped3", skipped);
+      }
+    }
+    let transactionsToWithDelta = transactionsTo.map((value, index, arr) => { 
+      let delta = index === 0 ? value.balance-oldBalance : value.balance-arr[index-1].balance;
+      return {id: value.id, txid: value.txid, delta: delta, height: value.height, n: value.n};
+    });
+    merged.push(...transactionsToWithDelta);
+    merged.sort((a, b) => {
+      if (a.height === b.height && a.n === b.n) {
+        return 0;
+      } else if (a.height < b.height || (a.height === b.height && a.n < b.n)) {
+        return -1;
+      } else {
+        return 1;
+      }
+    });
+    i = 1;
+    while (i < merged.length) {//remove duplicates
+      if (merged[i].height === merged[i-1].height && merged[i].n === merged[i-1].n) {
+        merged[i-1].delta = merged[i-1].delta+merged[i].delta;
+        merged.splice(i, 1);
+      } else {
+        i++;
+      }
+    }
+
     let balances = [];
-    balances[0] = merged[0].delta;
+    balances[0] = oldBalance+merged[0].delta;
     for (let i = 1; i < merged.length; i++) {
       balances[i] = balances[i-1]+merged[i].delta;
     }
   
     merged.forEach((tx, index: number) => {
-      if (transactionsTo.length > index && transactionsTo[index].txid === tx.txid && transactionsTo[index].balance === balances[index]) {
-        return;//already saved
-      } 
+      let newIndex = index+skipped;
 
       ops.push({
         type: "put",
-        key:db_cluster_balance_prefix+toCluster+"/"+integer2LexString(index),
+        key:db_cluster_balance_prefix+toCluster+"/"+integer2LexString(newIndex),
         value: this.cluster_balance_value(tx.txid, balances[index], tx.height, tx.n)
       });
       ops.push({
         type: "put",
         key:db_cluster_tx_balance_prefix+toCluster+"/"+tx.txid,
-        value: this.cluster_tx_balance_value(index, balances[index], tx.height, tx.n)
+        value: this.cluster_tx_balance_value(newIndex, balances[index], tx.height, tx.n)
       });
     });
     ops.push({
       type:"put",
       key:db_cluster_balance_count_prefix+toCluster,
-      value:merged.length
+      value:merged.length+skipped
     });
-  
     return this.db.batch(ops);
-  
   }
 
 
@@ -175,7 +262,7 @@ export class ClusterBalanceService {
     let deltas = [];
     clusterIdToDelta.forEach((delta: number, clusterId: string) => {
       clusterIds.push(clusterId);
-      promises.push(this.getLast(clusterId));
+      promises.push(this.getLast(Number(clusterId)));
       deltas.push(delta);
     });
     let oldBalances = await Promise.all(promises);
@@ -198,6 +285,5 @@ export class ClusterBalanceService {
     }
     return this.db.batch(ops);
   }
-
 
 }

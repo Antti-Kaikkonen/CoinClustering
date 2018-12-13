@@ -15,7 +15,7 @@ export class ClusterController {
     if (isNaN(to)) to = from+10;
     let promises = [];
     for (let i = from; i < to; i++) {
-      promises.push(this.clusterBalanceService.getLast(""+i));
+      promises.push(this.clusterBalanceService.getLast(i));
     }
     let values = await Promise.all(promises);
     values = values.map((v, index:number) => { 

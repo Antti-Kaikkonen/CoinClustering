@@ -4,3 +4,4 @@ db
 config.js
 index.js
 test-db
+dist

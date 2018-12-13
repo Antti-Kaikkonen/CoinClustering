@@ -50,54 +50,42 @@ export class ClusterBalanceService {
     });
   }
 
+
   async getClusterTransactionsAfter(clusterId: number, height: number, n: number): Promise<ClusterBalance[]> {
     return new Promise<ClusterBalance[]>(async (resolve, reject) => {
-      let result: ClusterBalance[] = [];
-      let iter = this.db['iterator']({
+      let res: ClusterBalance[] = [];
+      let rs = this.db.createReadStream({
         gte:db_cluster_balance_prefix+clusterId+"/0",
         lt:db_cluster_balance_prefix+clusterId+"/z",
         reverse: true
       });
-      while (true) {
-        let promise = new Promise<ClusterBalance>((resolve, reject) => {
-          iter.next((err, key: string, value: string) => {
-            if (err) {
-              reject(err);
-            } else {
-              if (value === undefined) {
-                resolve(undefined);
-              } else {
-                let index = Number(key.substr((db_cluster_balance_prefix+clusterId+"/").length));
-                let valueComponents = value.split(db_value_separator);
-                let cb = new ClusterBalance(index, valueComponents[0], Number(valueComponents[1]), Number(valueComponents[2]), Number(valueComponents[3]));
-                resolve(cb);
-              }
-            }
-          });
-        });
-        try {
-          let next = await promise;
-          if (next !== undefined && (next.height > height || next.height === height && next.n >= n)) {
-            result.push(next);
-          } else {
-            break;
-          }
-        } catch(err) {
-          reject(err);
-          iter.end((err) => {
-            console.log("iterator closed");
-          });
-          return;
-        }
+      rs.on('data', function (data) {
+        let key: string = data.key;
+        let index = Number(key.substr((db_cluster_balance_prefix+clusterId+"/").length));
+        let value: string = data.value;
+        let valueComponents = value.split(db_value_separator);
         
-      }
-      //console.log("merging to cluster with ", result.length, "addresses");
-      resolve(result);
-      iter.end((err) => {
-        //console.log("iterator closed");
+        let cb = new ClusterBalance(index, valueComponents[0], Number(valueComponents[1]), Number(valueComponents[2]), Number(valueComponents[3]));
+        if (cb.height > height || cb.height === height && cb.n >= n) {
+          res.unshift(cb);
+        } else {
+          resolve(res);
+          rs['destroy']('no error');
+        }  
+      })
+      .on('error', function (err) {
+        if (err !== "no error") {
+          console.log(err);
+          reject(err);
+        }
+      })
+      .on('close', function () {
+        resolve(res);
+      })
+      .on('end', function () {
       });
     });
-  }
+  }  
 
   async getClusterTransactions(clusterId: number): Promise<ClusterBalance[]> {
     return new Promise<ClusterBalance[]>((resolve, reject) => {
@@ -183,24 +171,20 @@ export class ClusterBalanceService {
       }
     }
     let transactionsTo = await this.getClusterTransactionsAfter(toCluster, merged[0].height, merged[0].n);//[0] = oldest.
-    transactionsTo = transactionsTo.reverse();
     let oldBalance: number;
     let skipped: number;
     if (transactionsTo.length === 0) {
       let asd = await this.getLast(toCluster);
       oldBalance = asd.balance;
       skipped = asd.id+1;
-      //console.log("skipped1", skipped);
     } else {
       if (transactionsTo[0].id === 0) {
         oldBalance = 0;
         skipped = 0;
-        //console.log("skipped2", skipped);
       } else {
         let asd = await this.getClusterTransaction(toCluster, transactionsTo[0].id-1);
         oldBalance = asd.balance;
         skipped = asd.id+1;
-        //console.log("skipped3", skipped);
       }
     }
     let transactionsToWithDelta = transactionsTo.map((value, index, arr) => { 

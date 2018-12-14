@@ -1,6 +1,6 @@
 import { LevelUp } from 'levelup';
 import { ClusterBalance } from '../models/cluster-balance';
-import { integer2LexString } from '../utils/utils';
+import { integer2LexString, lexString2Integer } from '../utils/utils';
 import { db_cluster_balance_count_prefix, db_cluster_balance_prefix, db_cluster_tx_balance_prefix, db_value_separator } from './db-constants';
 
 export class ClusterBalanceService {
@@ -20,7 +20,7 @@ export class ClusterBalanceService {
       })
       .on('data', function (data) {
         let key: string = data.key;
-        let index = Number(key.substr((db_cluster_balance_prefix+clusterId+"/").length));
+        let index = lexString2Integer(key.substr((db_cluster_balance_prefix+clusterId+"/").length));
         let value: string = data.value;
         let valueComponents = value.split(db_value_separator);
         
@@ -61,7 +61,7 @@ export class ClusterBalanceService {
       });
       rs.on('data', function (data) {
         let key: string = data.key;
-        let index = Number(key.substr((db_cluster_balance_prefix+clusterId+"/").length));
+        let index = lexString2Integer(key.substr((db_cluster_balance_prefix+clusterId+"/").length));
         let value: string = data.value;
         let valueComponents = value.split(db_value_separator);
         
@@ -96,7 +96,7 @@ export class ClusterBalanceService {
       });
       rs.on("data", function(data) {
         let key: string = data.key;
-        let index = Number(key.substr((db_cluster_balance_prefix+clusterId+"/").length));
+        let index = lexString2Integer(key.substr((db_cluster_balance_prefix+clusterId+"/").length));
         let value: string = data.value;
         let valueComponents = value.split(db_value_separator);
         transactions.push(

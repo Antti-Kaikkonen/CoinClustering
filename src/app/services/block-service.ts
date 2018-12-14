@@ -1,6 +1,6 @@
 import RpcClient from 'bitcoind-rpc';
 import { LevelUp } from 'levelup';
-import { integer2LexString } from '../utils/utils';
+import { integer2LexString, lexString2Integer } from '../utils/utils';
 import { db_block_hash } from './db-constants';
 
 export class BlockService {
@@ -49,7 +49,7 @@ export class BlockService {
       })
       .on('data', function (data) {
         let key: string = data.key;
-        let height: number = Number(key.substr(db_block_hash.length));
+        let height: number = lexString2Integer(key.substr(db_block_hash.length));
         resolve({height: height, hash: data.value});
       })
       .on('error', function (err) {

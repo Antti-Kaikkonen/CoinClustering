@@ -12,6 +12,7 @@
     "encoding-down": "^5.0.4",
     "express": "^4.16.4",
     "levelup": "^3.1.1",
+    "lexicographic-integer": "^1.1.0",
     "rocksdb": "^3.0.2"
   },
   "devDependencies": {

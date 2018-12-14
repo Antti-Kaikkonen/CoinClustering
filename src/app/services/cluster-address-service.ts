@@ -1,3 +1,4 @@
+import { AbstractBatch } from 'abstract-leveldown';
 import { LevelUp } from 'levelup';
 import { integer2LexString } from '../utils/utils';
 import { db_address_cluster_prefix, db_cluster_address_count_prefix, db_cluster_address_prefix, db_next_cluster_id } from './db-constants';
@@ -52,7 +53,7 @@ export class ClusterAddressService {
     });
   
     let values = await Promise.all(promises);
-    let ops = [];
+    let ops: AbstractBatch[] = [];
     let nextIndex = Number(values[0]);
 
     fromClusterIds.forEach((fromClusterId: number, index: number) => {

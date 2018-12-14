@@ -1,3 +1,4 @@
+import { AbstractBatch } from 'abstract-leveldown';
 import { LevelUp } from 'levelup';
 import { ClusterBalance } from '../models/cluster-balance';
 import { integer2LexString, lexString2Integer } from '../utils/utils';
@@ -129,7 +130,7 @@ export class ClusterBalanceService {
     let values = await Promise.all(transactionsFromPromises);
     
     let merged = [];
-    let ops = [];
+    let ops: AbstractBatch[] = [];
     fromClusters.forEach((fromCluster: number, index: number) => {
       let transactionsFrom = values[index].map((value: ClusterBalance, index: number, arr: ClusterBalance[]) => { 
         let delta = index === 0 ? value.balance : value.balance-arr[index-1].balance;
@@ -255,7 +256,7 @@ export class ClusterBalanceService {
       deltas.push(delta);
     });
     let oldBalances = await Promise.all(promises);
-    let ops = [];
+    let ops: AbstractBatch[] = [];
     for (let i = 0; i < deltas.length; i++) {
       let clusterId = clusterIds[i];
       let index = oldBalances[i] === undefined ? 0 : oldBalances[i].id+1;

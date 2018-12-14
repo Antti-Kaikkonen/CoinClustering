@@ -90,9 +90,7 @@ export class BlockImportService {
 
   async saveBlock(block) {
     if (block.height%1000 === 0) console.log(block.height);
-    //let rawtxs = await getRawTransactions(block.tx);
-    let txs = block.tx;//await decodeRawTransactions(rawtxs)
-    //if (true) return;
+    let txs = block.tx;
     for (const [txindex, tx] of txs.entries()) {
       let allAddresses = this.txAddresses(tx);
       let addressesToCluster = this.txAddressesToCluster(tx);
@@ -124,8 +122,8 @@ export class BlockImportService {
       } else {
         let toCluster: number = Math.min(...clusterIds);
         let fromClusters: number[] = clusterIds.filter(clusterId => clusterId !== toCluster);
-        if (fromClusters.length > 0) console.log("merging to",toCluster, "from ", fromClusters.join(","));
         if (fromClusters.length > 0) {
+          console.log("merging to",toCluster, "from ", fromClusters.join(","));
           await this.clusterAddressService.mergeClusterAddresses(toCluster, ...fromClusters);
           await this.clusterBalanceService.mergeClusterTransactions(toCluster, ...fromClusters);
         }

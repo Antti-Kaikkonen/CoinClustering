@@ -34,7 +34,7 @@ describe('Save a blocks with 3 transactions', () => {
     clusterAddressService = new ClusterAddressService(db);
     clusterBalanceService = new ClusterBalanceService(db);
     blockService = new BlockService(db, rpc);
-    blockImportService = new BlockImportService(db, rpc, clusterAddressService, clusterBalanceService, blockService);
+    blockImportService = new BlockImportService(db, clusterAddressService, clusterBalanceService, blockService);
 
     await blockImportService.saveBlock(b1);
   });

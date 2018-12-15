@@ -123,6 +123,27 @@ export class ClusterBalanceService {
     return index+db_value_separator+balance+db_value_separator+height+db_value_separator+n;
   }
 
+  private sortAndRemoveDuplicates(arr: any[]) {
+    arr.sort((a, b) => {
+      if (a.height === b.height && a.n === b.n) {
+        return 0;
+      } else if (a.height < b.height || (a.height === b.height && a.n < b.n)) {
+        return -1;
+      } else {
+        return 1;
+      }
+    });
+    let i = 1;
+    while (i < arr.length) {//remove duplicates
+      if (arr[i].height === arr[i-1].height && arr[i].n === arr[i-1].n) {
+        arr[i-1].delta = arr[i-1].delta+arr[i].delta;
+        arr.splice(i, 1);
+      } else {
+        i++;
+      }
+    }
+  }
+
   async mergeClusterTransactions(toCluster: number, ...fromClusters: number[]) {
     if (fromClusters.length === 0) return;
     let transactionsFromPromises = [];
@@ -153,25 +174,7 @@ export class ClusterBalanceService {
         key:db_cluster_balance_count_prefix+fromCluster
       });
     });
-
-    merged.sort((a, b) => {
-      if (a.height === b.height && a.n === b.n) {
-        return 0;
-      } else if (a.height < b.height || (a.height === b.height && a.n < b.n)) {
-        return -1;
-      } else {
-        return 1;
-      }
-    });
-    let i = 1;
-    while (i < merged.length) {//remove duplicates
-      if (merged[i].height === merged[i-1].height && merged[i].n === merged[i-1].n) {
-        merged[i-1].delta = merged[i-1].delta+merged[i].delta;
-        merged.splice(i, 1);
-      } else {
-        i++;
-      }
-    }
+    this.sortAndRemoveDuplicates(merged);
 
     let transactionsTo = await this.getClusterTransactionsAfter(toCluster, merged[0].height, merged[0].n);//[0] = oldest.
 
@@ -198,26 +201,7 @@ export class ClusterBalanceService {
     });
 
     transactionsToWithDelta.forEach(e => merged.push(e));
-
-    merged.sort((a, b) => {
-      if (a.height === b.height && a.n === b.n) {
-        return 0;
-      } else if (a.height < b.height || (a.height === b.height && a.n < b.n)) {
-        return -1;
-      } else {
-        return 1;
-      }
-    });
-
-    i = 1;
-    while (i < merged.length) {//remove duplicates
-      if (merged[i].height === merged[i-1].height && merged[i].n === merged[i-1].n) {
-        merged[i-1].delta = merged[i-1].delta+merged[i].delta;
-        merged.splice(i, 1);
-      } else {
-        i++;
-      }
-    }
+    this.sortAndRemoveDuplicates(merged);
 
     let balances = [];
     balances[0] = oldBalance+merged[0].delta;

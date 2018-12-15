@@ -1,3 +1,4 @@
+import { AbstractBatch } from 'abstract-leveldown';
 import RpcClient from 'bitcoind-rpc';
 import { LevelUp } from 'levelup';
 import { integer2LexString, lexString2Integer } from '../utils/utils';
@@ -10,7 +11,13 @@ export class BlockService {
   }  
 
   async saveBlockHash(height: number, hash: string) {
-    return this.db.put(db_block_hash+integer2LexString(height), hash);
+    let ops: AbstractBatch[] = [];
+    ops.push({
+      type:"put",
+      key:db_block_hash+integer2LexString(height),
+      value: hash
+    });
+    return this.db.batch(ops);
   }
 
   async getBlockHash(height: number): Promise<string> {
@@ -36,7 +43,7 @@ export class BlockService {
       savedBlockHash = await this.getBlockHash(height);
       rpcHash = await this.getRpcBlockHash(height);
     }
-    return {lastSavedHeight: lastSavedBlock.height, lastSavedHash: lastSavedBlock.hash, reorgDepth: lastSavedBlock.height-height};
+    return {lastSavedHeight: lastSavedBlock.height, lastSavedHash: lastSavedBlock.hash, reorgDepth: lastSavedBlock.height-height, commonAncestorHash: savedBlockHash};
   }
 
   async getLastBlock(): Promise<{height: number, hash: string}> {
@@ -68,5 +75,6 @@ export class BlockService {
 interface TipInfo {
   lastSavedHeight: number,
   lastSavedHash: string,
-  reorgDepth: number
+  reorgDepth: number,
+  commonAncestorHash: string
 }

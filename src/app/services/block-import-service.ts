@@ -1,4 +1,3 @@
-import RpcClient from "bitcoind-rpc";
 import { LevelUp } from "levelup";
 import { BlockService } from "./block-service";
 import { ClusterAddressService } from "./cluster-address-service";
@@ -7,8 +6,7 @@ import { db_address_cluster_prefix } from "./db-constants";
 
 export class BlockImportService {
 
-  constructor(private db: LevelUp, 
-    private rpc: RpcClient, 
+  constructor(private db: LevelUp,
     private clusterAddressService: ClusterAddressService, 
     private clusterBalanceService: ClusterBalanceService,
     private blockService: BlockService) {
@@ -91,7 +89,10 @@ export class BlockImportService {
   async saveBlock(block) {
     if (block.height%1000 === 0) console.log(block.height);
     let txs = block.tx;
+
+    let lasttxsaved: number;
     for (const [txindex, tx] of txs.entries()) {
+      if (lasttxsaved !== undefined && txindex >= lasttxsaved) continue;
       let allAddresses = this.txAddresses(tx);
       let addressesToCluster = this.txAddressesToCluster(tx);
       let addressesNotToCluster = new Set([...allAddresses].filter(x => !addressesToCluster.has(x)));
@@ -110,28 +111,17 @@ export class BlockImportService {
   
       let addressesWithClustersToCluster = addressesWithClusterInfo.filter(v => addressesToCluster.has(v.address));
   
-      let clusterIds: number[] = Array.from(new Set( addressesWithClustersToCluster.filter(v => v.cluster !== undefined).map(v => v.cluster.id) ));
-  
-      let nonClusterAddresses = addressesWithClustersToCluster.filter(v => v.cluster === undefined).map(v => v.address);
+      let clusterIds: number[] = Array.from(new Set( addressesWithClustersToCluster.filter(v => v.cluster !== undefined).map(v => v.cluster.id) )).sort();
   
       if (clusterIds.length === 0) {
-        if (nonClusterAddresses.length > 0) {
-          console.log("creating cluster with "+nonClusterAddresses.length+" addresses");
-          await this.clusterAddressService.createClusterWithAddresses(nonClusterAddresses);
-        }  
       } else {
-        let toCluster: number = Math.min(...clusterIds);
-        let fromClusters: number[] = clusterIds.filter(clusterId => clusterId !== toCluster);
+        let toCluster: number = clusterIds[0];
+        let fromClusters: number[] = clusterIds.slice(1);
         if (fromClusters.length > 0) {
           console.log("merging to",toCluster, "from ", fromClusters.join(","));
           await this.clusterAddressService.mergeClusterAddresses(toCluster, ...fromClusters);
           await this.clusterBalanceService.mergeClusterTransactions(toCluster, ...fromClusters);
         }
-  
-        if (nonClusterAddresses.length > 0) {
-          console.log("adding addresses", nonClusterAddresses, "to cluster", toCluster);
-          await this.clusterAddressService.addAddressesToCluster(nonClusterAddresses, toCluster);
-        }   
       }
       let addressBalanceChanges = this.getTransactionAddressBalanceChanges(tx);
       let clusterBalanceChanges = await this.addressBalanceChangesToClusterBalanceChanges(addressBalanceChanges);

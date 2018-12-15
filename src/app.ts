@@ -24,7 +24,7 @@ let blockService = new BlockService(db, rpc);
 
 let clusterController = new ClusterController(clusterBalanceService, clusterAddressService);
 
-let blockImportService = new BlockImportService(db, rpc, clusterAddressService, clusterBalanceService, blockService);
+let blockImportService = new BlockImportService(db, clusterAddressService, clusterBalanceService, blockService);
 
 const app = express();
 app.get("/hello", clusterController.clusterCurrentBalances);
@@ -67,11 +67,13 @@ async function getRawTransactions(txids: string[]) {
   });  
 }
 
+let firstBlock: boolean = true;
 const blockWriter = new Writable({
   objectMode: true,
   highWaterMark: 4,
   write: async (block, encoding, callback) => {
     await blockImportService.saveBlock(block);
+    firstBlock = false;
     callback(null);
   }
 });

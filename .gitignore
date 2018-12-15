@@ -5,3 +5,4 @@ config.js
 index.js
 test-db
 dist
+coin-clustering-**.tgz

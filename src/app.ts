@@ -10,10 +10,12 @@ import { BlockService } from './app/services/block-service';
 import { ClusterAddressService } from './app/services/cluster-address-service';
 import { ClusterBalanceService } from './app/services/cluster-balance-service';
 
-const config: RpcClientOptions = require('../config');
+let cwd = process.cwd();
+let args = process.argv.slice(2);
+const config: RpcClientOptions = require(cwd+'/config');
 
 var rpc = new RpcClient(config);
-let rocksdb = RocksDB('./db');
+let rocksdb = RocksDB(cwd+'/db');
 let db = levelup(encoding(rocksdb));
 
 let clusterBalanceService = new ClusterBalanceService(db);
@@ -33,6 +35,8 @@ app.get("/hello3", clusterController.clusterAddresses);
 app.get('/cluster_addresses/:id', clusterController.clusterAddresses);
 app.listen(3006);
 
+console.log("cwd", cwd);
+console.log("args", args);
 
 async function getBlockByHash(hash: string) {
   return new Promise<any>((resolve, reject) => {
@@ -103,20 +107,20 @@ class BlockReader extends Readable {
 
 
 
-process();
+doProcessing();
 
-async function process() {
+async function doProcessing() {
   let tipInfo = await blockService.getTipInfo();
   console.log("tipInfo", tipInfo);
   if (tipInfo !== undefined && tipInfo.reorgDepth > 0) {
     //TODO: process reorg
-    await process();
+    await doProcessing();
     return;
   }
   let hash = await blockService.getRpcBlockHash(tipInfo !== undefined ? tipInfo.lastSavedHeight+1 : 1);
   let blockReader = new BlockReader(hash);
   blockReader.pipe(blockWriter);
   blockWriter.on('close', () => {
-    setTimeout(process, 1000);
+    setTimeout(doProcessing, 1000);
   });
 }

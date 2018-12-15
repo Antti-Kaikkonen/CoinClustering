@@ -1,11 +1,15 @@
 {
   "name": "coin-clustering",
-  "version": "0.0.2",
+  "version": "0.0.6",
   "description": "Address clustering for bitcoin based cryptocurrencies",
   "scripts": {
     "start": "ts-node src/app.ts",
     "ts-node": "ts-node",
+    "build": "tsc",
     "test": "mocha -r ts-node/register src/**/*.spec.ts"
+  },
+  "bin": {
+    "coin-clustering": "./bin/coin-clustering"
   },
   "dependencies": {
     "bitcoind-rpc": "^0.7.2",
@@ -27,14 +31,19 @@
     "@types/rocksdb": "^3.0.0",
     "chai": "^4.2.0",
     "mocha": "^5.2.0",
-    "ts-node": "^7.0.1",
-    "typescript": "^3.1.6"
+    "typescript": "^3.1.6",
+    "ts-node": "^7.0.1"
   },
   "author": "Antti Kaikkonen",
   "repository": {
     "type": "git",
     "url": "https://github.com/Antti-Kaikkonen/CoinClustering"
   },
+  "files": [
+    "config.js.example",
+    "dist/",
+    "bin"
+  ],
   "keywords": [
     "cryptocurrency",
     "address clustering"

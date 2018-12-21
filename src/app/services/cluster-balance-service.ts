@@ -2,7 +2,7 @@ import { AbstractBatch } from 'abstract-leveldown';
 import { LevelUp } from 'levelup';
 import { ClusterBalance } from '../models/cluster-balance';
 import { integer2LexString, lexString2Integer } from '../utils/utils';
-import { db_cluster_balance_count_prefix, db_cluster_balance_prefix, db_cluster_tx_balance_prefix, db_value_separator } from './db-constants';
+import { db_cluster_balance_count_prefix, db_cluster_balance_prefix, db_cluster_tx_balance_prefix, db_last_saved_tx_n, db_value_separator } from './db-constants';
 
 export class ClusterBalanceService {
   
@@ -144,14 +144,14 @@ export class ClusterBalanceService {
     }
   }
 
-  async mergeClusterTransactions(toCluster: number, ...fromClusters: number[]) {
-    if (fromClusters.length === 0) return;
+  async mergeClusterTransactionsOps(toCluster: number, ...fromClusters: number[]): Promise<AbstractBatch[]> {
+    let ops: AbstractBatch[] = [];
+    if (fromClusters.length === 0) return ops;
     let transactionsFromPromises = [];
     fromClusters.forEach(fromCluster => transactionsFromPromises.push(this.getClusterTransactions(fromCluster)));
     let values = await Promise.all(transactionsFromPromises);
     
     let merged = [];
-    let ops: AbstractBatch[] = [];
     fromClusters.forEach((fromCluster: number, index: number) => {
       let transactionsFrom = values[index].map((value: ClusterBalance, index: number, arr: ClusterBalance[]) => { 
         let delta = index === 0 ? value.balance : value.balance-arr[index-1].balance;
@@ -175,7 +175,7 @@ export class ClusterBalanceService {
       });
     });
     this.sortAndRemoveDuplicates(merged);
-
+    if (merged.length === 0) return ops;
     let transactionsTo = await this.getClusterTransactionsAfter(toCluster, merged[0].height, merged[0].n);//[0] = oldest.
 
     let oldBalance: number;
@@ -227,7 +227,11 @@ export class ClusterBalanceService {
       key:db_cluster_balance_count_prefix+toCluster,
       value:merged.length+skipped
     });
-    return this.db.batch(ops);
+    return ops;
+  }
+
+  async mergeClusterTransactions(toCluster: number, ...fromClusters: number[]) {
+    return this.db.batch(await this.mergeClusterTransactionsOps(toCluster, ...fromClusters));
   }
 
   async saveClusterBalanceChanges(txid: string, height: number, n: number, clusterIdToDelta: Map<string, number>) {
@@ -257,6 +261,11 @@ export class ClusterBalanceService {
         value:this.cluster_tx_balance_value(index, newBalance, height, n)
       });
     }
+    ops.push({
+      type: "put",
+      key: db_last_saved_tx_n, 
+      value: n
+    });
     return this.db.batch(ops);
   }
 

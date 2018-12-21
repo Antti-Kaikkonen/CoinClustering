@@ -27,5 +27,7 @@ declare module 'bitcoind-rpc' {
     batch(batchcall, fn: (err, res: RpcResult<any>[])=>void): void;
 
     getBlockHash(height: number, fn?: (err, res: RpcResult<string>)=>void): void;
+
+    getBlockCount(cb?: (err, res: RpcResult<number>)=>void): void;
   }
 }  

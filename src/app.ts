@@ -16,7 +16,10 @@ const config: RpcClientOptions = require(cwd+'/config');
 
 var rpc = new RpcClient(config);
 let rocksdb = RocksDB(cwd+'/db');
-let db = levelup(encoding(rocksdb));
+let db = levelup(encoding(rocksdb), {
+  writeBufferSize: 8 * 1024 * 1024,
+  cacheSize: 1024 * 1024 * 1024
+});
 
 let clusterBalanceService = new ClusterBalanceService(db);
 
@@ -71,30 +74,23 @@ async function getRawTransactions(txids: string[]) {
   });  
 }
 
-let firstBlock: boolean = true;
-const blockWriter = new Writable({
-  objectMode: true,
-  highWaterMark: 4,
-  write: async (block, encoding, callback) => {
-    await blockImportService.saveBlock(block);
-    firstBlock = false;
-    callback(null);
-  }
-});
-
 class BlockReader extends Readable {
   currentHash: string;
-  constructor(hash: string) {
+  currentHeight: number;
+  constructor(hash: string, stopHeight: number) {
     super({
       objectMode: true,
       highWaterMark: 32,
       read: async (size) => {
-        while (true) {
+        if (this.currentHeight !== undefined && this.currentHeight > stopHeight) 
+          this.push(null);
+        else while (true) {
           let block = await getBlockByHash(this.currentHash);
           let rawtxs = await getRawTransactions(block.tx);
           let txs = await decodeRawTransactions(rawtxs);
           block.tx = txs;
           this.currentHash = block.nextblockhash;
+          this.currentHeight = block.height+1;
           let shouldBreak = this.push(block);
           break;//if (shouldBreak) break;//async push fixed in node 10 https://github.com/nodejs/node/pull/17979
         }
@@ -106,21 +102,67 @@ class BlockReader extends Readable {
 };  
 
 
+async function getRpcHeight(): Promise<number> {
+  return new Promise<number>((resolve, reject) => {
+    rpc.getBlockCount((err, res) => {
+      let height = res.result;
+      resolve(height);
+    });
+  });
+}
+
 
 doProcessing();
 
 async function doProcessing() {
-  let tipInfo = await blockService.getTipInfo();
+  let height = await getRpcHeight();
+  console.log("rpc height", height);
+  /*let tipInfo = await blockService.getTipInfo();
   console.log("tipInfo", tipInfo);
   if (tipInfo !== undefined && tipInfo.reorgDepth > 0) {
     //TODO: process reorg
     await doProcessing();
     return;
   }
-  let hash = await blockService.getRpcBlockHash(tipInfo !== undefined ? tipInfo.lastSavedHeight+1 : 1);
-  let blockReader = new BlockReader(hash);
+  let hash = await blockService.getRpcBlockHash(tipInfo !== undefined ? tipInfo.lastSavedHeight+1 : 1);*/
+  let lastMergedHeight: number = await blockImportService.getLastMergedHeight();
+  let lastSavedTxHeight: number = await blockImportService.getLastSavedTxHeight();
+  let blockWriter: Writable;
+  let startHeight: number;
+  let stayBehind = 100;
+  if (lastMergedHeight < height-stayBehind) {
+    console.log("merging");
+    startHeight = lastMergedHeight > -1 ? lastMergedHeight + 1 : 1;
+    blockWriter = new Writable({
+      objectMode: true,
+      highWaterMark: 4,
+      write: async (block, encoding, callback) => {
+        await blockImportService.blockMerging(block);
+        callback(null);
+      }
+    });
+  } else if (lastSavedTxHeight < height-stayBehind) {
+    console.log("saving transactions");
+    startHeight = lastSavedTxHeight > -1 ? lastSavedTxHeight + 1 : 1;
+    blockWriter = new Writable({
+      objectMode: true,
+      highWaterMark: 4,
+      write: async (block, encoding, callback) => {
+        await blockImportService.saveBlockTransactions(block);
+        callback(null);
+      }
+    });
+  } else {
+    setTimeout(doProcessing, 500);
+    return;
+  }
+
+  let startHash: string = await blockService.getRpcBlockHash(startHeight);
+  let blockReader = new BlockReader(startHash, height-stayBehind);
   blockReader.pipe(blockWriter);
-  blockWriter.on('close', () => {
-    setTimeout(doProcessing, 1000);
+  blockReader.on('end', () => {
+  });
+  blockWriter.on('finish', () => {
+    setTimeout(doProcessing, 0);
   });
 }

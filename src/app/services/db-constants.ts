@@ -15,3 +15,11 @@ export const db_next_cluster_id = "j";
 export const db_value_separator = ";";
 
 export const db_block_hash = "k";//prefix/height => hash
+
+export const db_last_merged_block_height = "l";//prefix => height
+
+export const db_last_saved_tx_height = "m";//prefix => height
+
+export const db_last_saved_tx_n = "n";//prefix => n
+
+export const db_cluster_merged_to = "o";//prefix/clusterId => clusterId (follow these links to discover current cluster from an old clusterId)

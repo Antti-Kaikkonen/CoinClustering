@@ -37,23 +37,17 @@ export class ClusterAddressService {
     });
   }
 
-  async mergeClusterAddresses(toClusterId: number, ...fromClusterIds: number[]) {
-    if (fromClusterIds.length === 0) return;
+  async mergeClusterAddressesOps(toClusterId: number, fromClusterIds: number[], nonClusterAddresses?: string[]): Promise<AbstractBatch[]> {
+    let ops: AbstractBatch[] = [];
+    if (fromClusterIds.length === 0 && (nonClusterAddresses === undefined || nonClusterAddresses.length === 0)) return ops;
     let promises: Promise<any>[] = [];
-    let addressCountPromise = new Promise<any>((resolve, reject) => {
-      this.db.get(db_cluster_address_count_prefix+toClusterId, (error, count) => {
-        if (error) reject(error)
-        else resolve(count);
-      });
-    });
-    promises.push(addressCountPromise);
-  
+    promises.push(this.db.get(db_cluster_address_count_prefix+toClusterId));
+
     fromClusterIds.forEach(fromClusterId => {
       promises.push(this.getClusterAddresses(fromClusterId));
     });
   
     let values = await Promise.all(promises);
-    let ops: AbstractBatch[] = [];
     let nextIndex = Number(values[0]);
 
     fromClusterIds.forEach((fromClusterId: number, index: number) => {
@@ -73,6 +67,7 @@ export class ClusterAddressService {
           key:db_address_cluster_prefix+address,
           value:toClusterId
         });
+        //console.log(ops[ops.length-1]);
         nextIndex++;
       });
       ops.push({
@@ -80,77 +75,89 @@ export class ClusterAddressService {
         key: db_cluster_address_count_prefix+fromClusterId
       });
     });
+    if (nonClusterAddresses !== undefined && nonClusterAddresses.length > 0) {
+      ops.push(... await this.addAddressesToClusterOps(nonClusterAddresses, toClusterId, nextIndex));
+    } else {
+      ops.push({
+        type:"put", 
+        key: db_cluster_address_count_prefix+toClusterId, 
+        value: nextIndex
+      });
+    }
+    return ops;
+  }
+
+  async mergeClusterAddresses(toClusterId: number, ...fromClusterIds: number[]) {
+    return this.db.batch(await this.mergeClusterAddressesOps(toClusterId, fromClusterIds));
+  }
+
+  async addAddressesToClusterOps(addresses: string[], clusterId: number, oldClusterAddressCount?: number) {
+    let ops: AbstractBatch[] = [];
+    if (oldClusterAddressCount === undefined) {
+      oldClusterAddressCount = Number(await this.db.get(db_cluster_address_count_prefix+clusterId));
+    }
     ops.push({
-      type:"put", 
-      key: db_cluster_address_count_prefix+toClusterId, 
-      value: nextIndex
+      type:"put",
+      key:db_cluster_address_count_prefix+clusterId,
+      value:Number(oldClusterAddressCount)+addresses.length
     });
-    return this.db.batch(ops);
+    addresses.forEach((address, index) => {
+      let newIndex: number = Number(oldClusterAddressCount)+index;
+      ops.push({
+        type: "put",
+        key: db_cluster_address_prefix+clusterId+"/"+integer2LexString(newIndex),
+        value: address
+      });
+      ops.push({
+        type: "put",
+        key: db_address_cluster_prefix+address,
+        value: clusterId
+      });
+    });
+    return ops;
   }
 
   async addAddressesToCluster(addresses: string[], clusterId: number): Promise<void> {
-    return new Promise<any>((resolve, reject) => {
-      if (addresses.length === 0) {
-        resolve();
-        return;
-      }  
-      this.db.get(db_cluster_address_count_prefix+clusterId, (error, count) => {
-        let ops = [];
-        ops.push({
-          type:"put",
-          key:db_cluster_address_count_prefix+clusterId,
-          value:Number(count)+addresses.length
-        });
-        addresses.forEach((address, index) => {
-          let newIndex = Number(count)+index+1;
-          ops.push({
-            type: "put",
-            key: db_cluster_address_prefix+clusterId+"/"+integer2LexString(newIndex),
-            value: address
-          });
-          ops.push({
-            type: "put",
-            key: db_address_cluster_prefix+address,
-            value: clusterId
-          });
-        });
-        this.db.batch(ops, (error) => {
-          if (error) reject(error)
-          else resolve();
-        });
-      });
-    });
+    return this.db.batch(await this.addAddressesToClusterOps(addresses, clusterId));
   }
 
-  async createMultipleAddressClusters(clusters: Array<string[]>) {
-    let next_cluster_id: number;
-    try {
-      next_cluster_id = Number(await this.db.get(db_next_cluster_id));
-    } catch (error) {
-      next_cluster_id = 0;
+  async createAddressClustersOps(clusterAddresses: string[], clusterId: number): Promise<AbstractBatch[]> {
+    let ops: AbstractBatch[] = [];
+    if (clusterAddresses.length === 0) throw new Error("createAddressClustersOps called with 0 addresses");
+    ops.push({
+      type:"put",
+      key:db_cluster_address_count_prefix+clusterId,
+      value:clusterAddresses.length
+    });
+    clusterAddresses.forEach((address: string, index: number) => {
+      ops.push({
+        type: "put",
+        key: db_cluster_address_prefix+clusterId+"/"+integer2LexString(index),
+        value: address
+      });
+      ops.push({
+        type: "put",
+        key: db_address_cluster_prefix+address,
+        value: clusterId
+      });
+    });
+    return ops;
+  }  
+
+  async createMultipleAddressClusters(clusters: Array<string[]>, next_cluster_id?: number) {
+    if (next_cluster_id === undefined) {
+      try {
+        next_cluster_id = Number(await this.db.get(db_next_cluster_id));
+      } catch (error) {
+        next_cluster_id = 0;
+      }
     }
     let ops = [];
-    clusters.forEach((clusterAddresses: string[]) => {
-      if (clusterAddresses.length === 0) return;
-      ops.push({
-        type:"put",
-        key:db_cluster_address_count_prefix+next_cluster_id,
-        value:clusterAddresses.length
-      });
-      clusterAddresses.forEach((address: string, index: number) => {
-        ops.push({
-          type: "put",
-          key: db_cluster_address_prefix+next_cluster_id+"/"+integer2LexString(index),
-          value: address
-        });
-        ops.push({
-          type: "put",
-          key: db_address_cluster_prefix+address,
-          value: next_cluster_id
-        });
-      });
+    for (let clusterAddresses of clusters) {
+      let newOps = await this.createAddressClustersOps(clusterAddresses, next_cluster_id);
+      newOps.forEach(op => ops.push(op));
       next_cluster_id++;
-    });
+    }
     ops.push({
       type:"put",
       key:db_next_cluster_id,

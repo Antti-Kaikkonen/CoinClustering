@@ -52,7 +52,7 @@ describe('Save a blocks with 3 transactions', () => {
         ],
         "vout":[
           {
-            "valueSat":10,
+            "value":10/100000000,
             "scriptPubKey":{
               "addresses":[
                   "address1"
@@ -60,7 +60,7 @@ describe('Save a blocks with 3 transactions', () => {
             }
           },
           {
-            "valueSat":10,
+            "value":10/100000000,
             "scriptPubKey":{
               "addresses":[
                   "address2"
@@ -68,7 +68,7 @@ describe('Save a blocks with 3 transactions', () => {
             }
           },
           {
-            "valueSat":10,
+            "value":10/100000000,
             "scriptPubKey":{
               "addresses":[
                   "address3"
@@ -76,7 +76,7 @@ describe('Save a blocks with 3 transactions', () => {
             }
           },
           {
-            "valueSat":10,
+            "value":10/100000000,
             "scriptPubKey":{
               "addresses":[
                   "address4"
@@ -89,13 +89,13 @@ describe('Save a blocks with 3 transactions', () => {
         "txid":"tx2",//spend from address1 to address2 and address3
         "vin":[
             {
-              "valueSat":2,
+              "value":2/100000000,
               "address":"address1"
             }
         ],
         "vout":[
           {
-            "valueSat":1,
+            "value":1/100000000,
             "scriptPubKey":{
               "addresses":[
                 "address2"
@@ -103,7 +103,7 @@ describe('Save a blocks with 3 transactions', () => {
             }
           },
           {
-            "valueSat":1,
+            "value":1/100000000,
             "scriptPubKey":{
               "addresses":[
                 "address3"
@@ -116,17 +116,17 @@ describe('Save a blocks with 3 transactions', () => {
         "txid":"tx3",//send from address3 and address4 to address 2
         "vin":[
             {
-              "valueSat":11,
+              "value":11/100000000,
               "address":"address3"
             },
             {
-              "valueSat":10,
+              "value":10/100000000,
               "address":"address4"
             }
         ],
         "vout":[
           {
-            "valueSat":20,
+            "value":20/100000000,
             "scriptPubKey":{
               "addresses":[
                 "address2"

@@ -1,4 +1,4 @@
-import RpcClient, { RpcClientOptions } from 'bitcoind-rpc';
+import RpcClient from 'bitcoind-rpc';
 import encoding from 'encoding-down';
 import express from 'express';
 import levelup from 'levelup';
@@ -12,7 +12,7 @@ import { ClusterBalanceService } from './app/services/cluster-balance-service';
 
 let cwd = process.cwd();
 let args = process.argv.slice(2);
-const config: RpcClientOptions = require(cwd+'/config');
+const config: any = require(cwd+'/config');
 
 var rpc = new RpcClient(config);
 let rocksdb = RocksDB(cwd+'/db');
@@ -36,7 +36,7 @@ app.get("/hello", clusterController.clusterCurrentBalances);
 app.get("/hello2", clusterController.clusterTransactions);
 app.get("/hello3", clusterController.clusterAddresses);
 app.get('/cluster_addresses/:id', clusterController.clusterAddresses);
-app.listen(3006);
+app.listen(config.listen_port);
 
 console.log("cwd", cwd);
 console.log("args", args);

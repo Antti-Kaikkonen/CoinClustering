@@ -130,9 +130,11 @@ async function doProcessing() {
   let blockWriter: Writable;
   let startHeight: number;
   let stayBehind = 100;
+  let toHeight: number;
   if (lastMergedHeight < height-stayBehind) {
     console.log("merging");
     startHeight = lastMergedHeight > -1 ? lastMergedHeight + 1 : 1;
+    toHeight = height-stayBehind;
     blockWriter = new Writable({
       objectMode: true,
       highWaterMark: 4,
@@ -144,6 +146,7 @@ async function doProcessing() {
   } else if (lastSavedTxHeight < height-stayBehind) {
     console.log("saving transactions");
     startHeight = lastSavedTxHeight > -1 ? lastSavedTxHeight + 1 : 1;
+    toHeight = lastMergedHeight;
     blockWriter = new Writable({
       objectMode: true,
       highWaterMark: 4,
@@ -153,12 +156,12 @@ async function doProcessing() {
       }
     });
   } else {
-    setTimeout(doProcessing, 500);
+    setTimeout(doProcessing, 10000);
     return;
   }
 
   let startHash: string = await blockService.getRpcBlockHash(startHeight);
-  let blockReader = new BlockReader(startHash, height-stayBehind);
+  let blockReader = new BlockReader(startHash, toHeight);
   blockReader.pipe(blockWriter);
   blockReader.on('end', () => {
   });

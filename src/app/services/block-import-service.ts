@@ -71,6 +71,7 @@ export class BlockImportService {
     let clusterToDelta = new Map<string, number>();
     addresses.forEach((address: string, index: number) => {
       let clusterId = clusterIds[index];
+      if (clusterId === undefined) throw Error("Cluster missing");
       let oldBalance = clusterToDelta.get(clusterId);
       let addressDelta = addressToDelta.get(address);
       if (!oldBalance) oldBalance = 0;
@@ -131,7 +132,7 @@ export class BlockImportService {
         let toClusterId = clusterIds[0];
         let fromClusters = clusterIds.slice(1);
         if (fromClusters.length > 0 || clusterAddresses.length > 0) {
-          console.log("merging to",toClusterId,"from",fromClusters.join(","));
+          console.log(lastBlockHeight.toString(),"merging to",toClusterId,"from",fromClusters.join(","));
           promises.push(this.clusterAddressService.mergeClusterAddressesOps(toClusterId, fromClusters, clusterAddresses));
           if (fromClusters.length > 0) promises.push(this.clusterBalanceService.mergeClusterTransactionsOps(toClusterId, ...fromClusters));
           fromClusters.forEach(fromClusterId => {
@@ -159,7 +160,7 @@ export class BlockImportService {
       value: await this.getNextClusterId()
     });
 
-    if (ops.length > 10000) console.log("ops.length: ", ops.length);
+    if (ops.length > 1000) console.log("ops.length: ", ops.length);
     await this.db.batch(ops);
   }
 

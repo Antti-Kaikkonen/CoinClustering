@@ -25,13 +25,13 @@ export class BlockImportService {
     .forEach(vin => {
       let oldBalance = addressToDelta.get(vin.address);
       if (!oldBalance) oldBalance = 0;
-      addressToDelta.set(vin.address, oldBalance-vin.valueSat);
+      addressToDelta.set(vin.address, oldBalance-vin.value*100000000);
     }); 
     tx.vout.filter(vout => vout.scriptPubKey.addresses && vout.scriptPubKey.addresses.length === 1)
     .forEach(vout => {
       let oldBalance = addressToDelta.get(vout.scriptPubKey.addresses[0]);
       if (!oldBalance) oldBalance = 0;
-      addressToDelta.set(vout.scriptPubKey.addresses[0], oldBalance+vout.valueSat);
+      addressToDelta.set(vout.scriptPubKey.addresses[0], oldBalance+vout.value*100000000);
     });
     return addressToDelta;
   }
@@ -99,9 +99,9 @@ export class BlockImportService {
     if (tx.vin.length < 2) return false;
     if (tx.vout.length !== tx.vin.length) return false;
     let firstInput = tx.vin[0];
-    if (typeof firstInput.valueSat !== 'number') return false;
-    if (!tx.vin.every(vin => vin.valueSat === firstInput.valueSat)) return false;
-    if (!tx.vout.every(vout => vout.valueSat === firstInput.valueSat)) return false;
+    if (typeof firstInput.value !== 'number') return false;
+    if (!tx.vin.every(vin => vin.value === firstInput.value)) return false;
+    if (!tx.vout.every(vout => vout.value === firstInput.value)) return false;
     return true;
   }
   

@@ -77,6 +77,7 @@ export class ClusterAddressService {
     });
     if (nonClusterAddresses !== undefined && nonClusterAddresses.length > 0) {
       ops.push(... await this.addAddressesToClusterOps(nonClusterAddresses, toClusterId, nextIndex));
+      nextIndex += nonClusterAddresses.length;
     } else {
       ops.push({
         type:"put", 

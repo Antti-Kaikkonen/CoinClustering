@@ -3,7 +3,7 @@ import encoding from 'encoding-down';
 import express from 'express';
 import levelup from 'levelup';
 import RocksDB from 'rocksdb';
-import { Readable, Writable } from 'stream';
+import { Readable, Transform, Writable } from 'stream';
 import { ClusterController } from './app/controllers/cluster-controller';
 import { BlockImportService } from './app/services/block-import-service';
 import { BlockService } from './app/services/block-service';
@@ -80,19 +80,81 @@ async function getRawTransactions(txids: string[]) {
   });  
 }
 
+class attachTransactons extends Transform {
+  constructor() {
+    super({
+      objectMode: true,
+      highWaterMark: 64,
+      transform: async (block, encoding, callback) => {
+        let rawtxs = await getRawTransactions(block.tx);
+        let txs = await decodeRawTransactions(rawtxs);
+        block.tx = txs;
+        this.push(block);
+        callback();
+      }
+    });
+  }
+}
+
+class attachInputs extends Transform {
+  constructor() {
+    super({
+      objectMode: true,
+      highWaterMark: 64,
+      transform: async (block, encoding, callback) => {
+        let input_txids = [];
+        block.tx.forEach((tx, n) => {
+          tx.vin.forEach(vin => {
+            if (vin.coinbase) return;
+            if (vin.value === undefined) {
+              let foundTx = block.tx.slice(0, n).find(tx => tx.txid === vin.txid);
+              if (foundTx !== undefined) {
+                vin.value = foundTx.vout[vin.vout].value;
+                let pubkey = foundTx.vout[vin.vout].scriptPubKey;
+                if (pubkey.addresses && pubkey.addresses.length === 1) vin.address = pubkey.addresses[0];
+              } else {
+                if (input_txids.indexOf(vin.txid) >= 0) return;
+                input_txids.push(vin.txid);
+              }
+            }
+          });
+        });
+        if (input_txids.length > 0) {
+          let txs2 = await decodeRawTransactions(await getRawTransactions(input_txids));
+          block.tx.forEach(tx => {
+            tx.vin.forEach(vin => {
+              if (vin.coinbase) return;
+              if (vin.value === undefined) {
+                let index = input_txids.indexOf(vin.txid);
+                vin.value = txs2[index].vout[vin.vout].value;
+                let pubkey = txs2[index].vout[vin.vout].scriptPubKey;
+                if (pubkey.addresses && pubkey.addresses.length === 1) 
+                  vin.address = pubkey.addresses[0];
+              }  
+            });
+          });      
+        }
+        this.push(block);
+        callback();
+      }
+    });
+  }
+}
+
+
 class BlockReader extends Readable {
   currentHash: string;
   currentHeight: number;
   constructor(hash: string, stopHeight: number) {
     super({
       objectMode: true,
-      highWaterMark: 32,
+      highWaterMark: 64,
       read: async (size) => {
         if (this.currentHeight !== undefined && this.currentHeight > stopHeight) 
           this.push(null);
         else while (true) {
           let block = await getBlockByHash(this.currentHash);
-          let rawtxs = await getRawTransactions(block.tx);
+          /*let rawtxs = await getRawTransactions(block.tx);
           let txs = await decodeRawTransactions(rawtxs);
           let input_txids = [];
           txs.forEach(tx => {
@@ -125,7 +187,7 @@ class BlockReader extends Readable {
               });
             });      
           }
-          block.tx = txs;
+          block.tx = txs;*/
           this.currentHash = block.nextblockhash;
           this.currentHeight = block.height+1;
           let shouldBreak = this.push(block);
@@ -174,7 +236,7 @@ async function doProcessing() {
     console.log("merging between blocks", startHeight, "and", toHeight);
     blockWriter = new Writable({
       objectMode: true,
-      highWaterMark: 4,
+      highWaterMark: 64,
       write: async (block, encoding, callback) => {
         await blockImportService.blockMerging(block);
         callback(null);
@@ -186,7 +248,7 @@ async function doProcessing() {
     console.log("saving transactions between blocks", startHeight, "and", toHeight);
     blockWriter = new Writable({
       objectMode: true,
-      highWaterMark: 4,
+      highWaterMark: 64,
       write: async (block, encoding, callback) => {
         await blockImportService.saveBlockTransactions(block);
         callback(null);
@@ -199,7 +261,8 @@ async function doProcessing() {
 
   let startHash: string = await blockService.getRpcBlockHash(startHeight);
   let blockReader = new BlockReader(startHash, toHeight);
-  blockReader.pipe(blockWriter);
+  blockReader.pipe(new attachTransactons()).pipe(new attachInputs()).pipe(blockWriter);
+  //blockReader.pipe(blockWriter);
   blockReader.on('end', () => {
   });
   blockWriter.on('finish', () => {

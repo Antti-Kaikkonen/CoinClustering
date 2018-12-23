@@ -38,9 +38,6 @@ app.get("/hello3", clusterController.clusterAddresses);
 app.get('/cluster_addresses/:id', clusterController.clusterAddresses);
 app.listen(config.listen_port);
 
-console.log("cwd", cwd);
-console.log("args", args);
-
 async function getBlockByHash(hash: string) {
   return new Promise<any>((resolve, reject) => {
     rpc.getBlock(hash, (error, ret) => {

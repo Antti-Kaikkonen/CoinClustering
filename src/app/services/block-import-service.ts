@@ -134,7 +134,7 @@ export class BlockImportService {
         if (fromClusters.length > 0 || clusterAddresses.length > 0) {
           console.log(lastBlockHeight.toString(),"merging to",toClusterId,"from",fromClusters.join(","));
           promises.push(this.clusterAddressService.mergeClusterAddressesOps(toClusterId, fromClusters, clusterAddresses));
-          if (fromClusters.length > 0) promises.push(this.clusterBalanceService.mergeClusterTransactionsOps(toClusterId, ...fromClusters));
+          if (fromClusters.length > 0 && await this.getLastSavedTxHeight() > -1) promises.push(this.clusterBalanceService.mergeClusterTransactionsOps(toClusterId, ...fromClusters));
           fromClusters.forEach(fromClusterId => {
             ops.push({
               type:"put",

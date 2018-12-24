@@ -48,7 +48,7 @@ async function getBlockByHash(hash: string) {
   });
 }
 
-async function decodeRawTransactions(rawtxs: any[]) {
+async function decodeRawTransactionsHelper(rawtxs: any[]) {
   let batchCall = () => {
     rawtxs.forEach(rawtx => rpc.decodeRawTransaction(rawtx));
   }
@@ -64,7 +64,18 @@ async function decodeRawTransactions(rawtxs: any[]) {
   });
 }
 
-async function getRawTransactions(txids: string[]) {
+async function decodeRawTransactions(rawtxs: any[]) {
+  let res = [];
+  let from = 0;
+  while (from < rawtxs.length) {
+    let txs = await decodeRawTransactionsHelper(rawtxs.slice(from, from+500));//To avoid HTTP 413 error
+    txs.forEach(tx => res.push(tx));
+    from+=500;
+  }
+  return res;
+}
+
+async function getRawTransactionsHelper(txids: string[]) {
   let batchCall = () => {
     txids.forEach(txid => rpc.getRawTransaction(txid));
   }
@@ -75,6 +86,17 @@ async function getRawTransactions(txids: string[]) {
       else resolve(rawtxs.map(rawtx => rawtx.result));
     });
   });  
+}
+
+async function getRawTransactions(txids: string[]) {
+  let res = [];
+  let from = 0;
+  while (from < txids.length) {
+    let rawtxs = await getRawTransactionsHelper(txids.slice(from, from+500));//To avoid HTTP 413 error
+    rawtxs.forEach(rawtx => res.push(rawtx));
+    from+=500;
+  }
+  return res;
 }
 
 class attachTransactons extends Transform {

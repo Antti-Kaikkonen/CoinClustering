@@ -219,7 +219,8 @@ export class BlockImportService {
       });
     });
 
-    for (let i = 0; i < newClusters.length; i++) {
+    this.mergeIntersectingClusters(newClusters);
+    /*for (let i = 0; i < newClusters.length; i++) {
       let ii = 0;
       let clusterA = newClusters[i];
       while (ii < newClusters.length) {
@@ -231,7 +232,7 @@ export class BlockImportService {
           ii++;
         }
       }
-    }
+    }*/
 
     for (let i = 0; i < txs.length; i++) {
       let txAddresses = txToAddressesNotToCluster.get(i);
@@ -246,6 +247,25 @@ export class BlockImportService {
       });  
     }
     return newClusters;
+  }
+
+  private mergeIntersectingClusters(clusters: Cluster[]): void {
+    for (let i = 0; i < clusters.length; i++) {
+      let clusterA = clusters[i];
+      let mergedToClusterA;
+      do {
+        mergedToClusterA = false;
+        for (let ii = i+1; ii < clusters.length; ii++) {
+          let clusterB = clusters[ii];
+          if (clusterA.intersectsWith(clusterB)) {
+            clusterA.mergeFrom(clusterB);
+            clusters.splice(ii, 1);
+            mergedToClusterA = true;
+            break;
+          }  
+        }
+      } while (mergedToClusterA);
+    }
   }
 
   async blockMerging(block: BlockWithTransactions) {

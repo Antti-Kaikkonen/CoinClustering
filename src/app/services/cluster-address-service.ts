@@ -76,15 +76,16 @@ export class ClusterAddressService {
       });
     });
     if (nonClusterAddresses !== undefined && nonClusterAddresses.length > 0) {
-      ops.push(... await this.addAddressesToClusterOps(nonClusterAddresses, toClusterId, nextIndex));
+      let addAddressesOps = await this.addAddressesToClusterOps(nonClusterAddresses, toClusterId, nextIndex);
+      addAddressesOps.forEach(op => ops.push(op));
       nextIndex += nonClusterAddresses.length;
-    } else {
-      ops.push({
-        type:"put", 
-        key: db_cluster_address_count_prefix+toClusterId, 
-        value: nextIndex
-      });
     }
+      
+    ops.push({
+      type:"put", 
+      key: db_cluster_address_count_prefix+toClusterId, 
+      value: nextIndex
+    });
     return ops;
   }
 
@@ -97,11 +98,6 @@ export class ClusterAddressService {
     if (oldClusterAddressCount === undefined) {
       oldClusterAddressCount = Number(await this.db.get(db_cluster_address_count_prefix+clusterId));
     }
-    ops.push({
-      type:"put",
-      key:db_cluster_address_count_prefix+clusterId,
-      value:Number(oldClusterAddressCount)+addresses.length
-    });
     addresses.forEach((address, index) => {
       let newIndex: number = Number(oldClusterAddressCount)+index;
       ops.push({

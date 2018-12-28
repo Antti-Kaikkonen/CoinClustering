@@ -1,5 +1,8 @@
 import { AbstractBatch } from "abstract-leveldown";
 import { LevelUp } from "levelup";
+import { BlockWithTransactions } from "../models/block";
+import { Cluster } from "../models/cluster";
+import { Transaction } from "../models/transaction";
 import { BlockService } from "./block-service";
 import { ClusterAddressService } from "./cluster-address-service";
 import { ClusterBalanceService } from "./cluster-balance-service";
@@ -19,7 +22,7 @@ export class BlockImportService {
   lastSavedTxN: number;
   nextClusterId: number;
 
-  private getTransactionAddressBalanceChanges(tx): Map<string, number> {
+  private getTransactionAddressBalanceChanges(tx: Transaction): Map<string, number> {
     let addressToDelta = new Map<string, number>();
     tx.vin.filter(vin => vin.address)
     .forEach(vin => {
@@ -80,22 +83,22 @@ export class BlockImportService {
     return clusterToDelta;
   }
   
-  private txAddressesToCluster(tx): Set<string> {
+  private txAddressesToCluster(tx: Transaction): Set<string> {
     let result = new Set<string>();
     if (this.isMixingTx(tx)) return result;
     tx.vin.map(vin => vin.address).filter(address => address !== undefined).forEach(address => result.add(address));
     return result;
   }
   
-  private txAddresses(tx): Set<string> {
+  private txAddresses(tx: Transaction): Set<string> {
     let result = new Set<string>();
     tx.vin.map(vin => vin.address).filter(address => address !== undefined).forEach(address => result.add(address));
-    tx.vout.filter(vout => vout.scriptPubKey.addresses && vout.scriptPubKey.addresses.length === 1)
+    tx.vout.filter(vout => vout.scriptPubKey.addresses && vout.scriptPubKey.addresses.length === 1 && vout.scriptPubKey.addresses[0])
     .map(vout => vout.scriptPubKey.addresses[0]).forEach(address => result.add(address));
     return result;
   }
 
-  private isMixingTx(tx) {
+  private isMixingTx(tx: Transaction) {
     if (tx.vin.length < 2) return false;
     if (tx.vout.length !== tx.vin.length) return false;
     let firstInput = tx.vin[0];
@@ -119,11 +122,9 @@ export class BlockImportService {
 
   async processClusters(clusters: Cluster[], lastBlockHeight: number) {
     let ops: AbstractBatch[] = [];
-    let promises = [];
-    let i = 0;
+    let promises: Promise<any>[] = [];
     for (let cluster of clusters) {
-      i++;
-      let clusterIds: number[] = Array.from(cluster.clusterIds).sort((a, b) => a-b);
+      let clusterIds: number[] = cluster.clusterIdsSorted();
       let clusterAddresses: string[] = Array.from(cluster.addresses);
       if (clusterIds.length === 0) {
         promises.push(this.clusterAddressService.createAddressClustersOps(clusterAddresses, await this.getNextClusterId()));
@@ -147,7 +148,6 @@ export class BlockImportService {
     }  
     let v = await Promise.all(promises);
     v.forEach(opGroup => opGroup.forEach(op => ops.push(op)));
-    let a = (new Date).getTime();
 
     ops.push({
       type:"put",
@@ -165,12 +165,8 @@ export class BlockImportService {
   }
 
 
-  private async computeClusters(block): Promise<Cluster[]> {
+  private async computeClusters(block: BlockWithTransactions): Promise<Cluster[]> {
     let txs = block.tx;
-    
-
-    let a = (new Date).getTime();
-
 
     let allAddresses: Set<string> = new Set();
     let txToAddress: Map<number, Set<string>> = new Map();
@@ -236,9 +232,6 @@ export class BlockImportService {
         }
       }
     }
-    for (let i = 0; i < txs.length; i++) {
-      let txAddresses = txToAddress.get(i);
-    }
 
     for (let i = 0; i < txs.length; i++) {
       let txAddresses = txToAddressesNotToCluster.get(i);
@@ -255,14 +248,14 @@ export class BlockImportService {
     return newClusters;
   }
 
-  async blockMerging(block) {
-    if (block.height <= this.getLastMergedHeight()) return;
+  async blockMerging(block: BlockWithTransactions) {
+    if (block.height <= await this.getLastMergedHeight()) return;
     await this.processClusters(await this.computeClusters(block), block.height);
     this.lastMergedHeight = block.height;
   }
 
-  async saveBlockTransactions(block) {
-    if (block.height <= this.getLastSavedTxHeight()) return;//already saved
+  async saveBlockTransactions(block: BlockWithTransactions) {
+    if (block.height <= await this.getLastSavedTxHeight()) return;//already saved
     let txs = block.tx;
 
     let clusterBalanceChangesPromises = [];
@@ -337,7 +330,7 @@ export class BlockImportService {
     return this.nextClusterId;
   }
 
-  async saveBlock(block) {
+  async saveBlock(block: BlockWithTransactions) {
     if (block.height%1000 === 0) {
       console.log(block.height);
     }  
@@ -346,75 +339,9 @@ export class BlockImportService {
       await this.blockMerging(block);
       this.lastMergedHeight = block.height;
     }
-    //if (true) return;
     if (block.height >= await this.getLastSavedTxHeight()) {
       await this.saveBlockTransactions(block);
     }
-    
-    //if (true) return;
-
-
-    /*for (const [txindex, tx] of txs.entries()) {
-      let allAddresses = this.txAddresses(tx);
-      let addressesToCluster = this.txAddressesToCluster(tx);
-      let addressToClusterPromises = [];
-  
-      for (let address of allAddresses) {
-        addressToClusterPromises.push(this.getAddressClusterInfo(address));
-      }
-      let addressesWithClusterInfo = await Promise.all(addressToClusterPromises);
-  
-      let singleAddressClustersToCreate = addressesWithClusterInfo
-      .filter(v => v.clusterId === undefined && !addressesToCluster.has(v.address))
-      .map(v => [v.address]);
-      await this.clusterAddressService.createMultipleAddressClusters(singleAddressClustersToCreate);
-  
-      let addressesWithClustersToCluster = addressesWithClusterInfo.filter(v => addressesToCluster.has(v.address));
-  
-      let clusterIds: number[] = Array.from(new Set( addressesWithClustersToCluster.filter(v => v.clusterId !== undefined).map(v => v.clusterId) )).sort();
-  
-      if (clusterIds.length === 0) {
-      } else {
-        let toCluster: number = clusterIds[0];
-        let fromClusters: number[] = clusterIds.slice(1);
-        if (fromClusters.length > 0) {
-          console.log("merging to",toCluster, "from ", fromClusters.join(","));
-          await this.clusterAddressService.mergeClusterAddresses(toCluster, ...fromClusters);
-          await this.clusterBalanceService.mergeClusterTransactions(toCluster, ...fromClusters);
-        }
-      }
-      let addressBalanceChanges = this.getTransactionAddressBalanceChanges(tx);
-      let clusterBalanceChanges = await this.addressBalanceChangesToClusterBalanceChanges(addressBalanceChanges);
-      await this.clusterBalanceService.saveClusterBalanceChanges(tx.txid, block.height, txindex, clusterBalanceChanges);
-    }
-    await this.blockService.saveBlockHash(block.height, block.hash);*/
   }
 
 }  
-
-class Cluster {
-  constructor(
-    public addresses: Set<string> = new Set(), 
-    public clusterIds: Set<number> = new Set()
-  ) {}
-
-  mergeFrom(anotherCluster: Cluster) {
-    anotherCluster.addresses.forEach(address => this.addresses.add(address));
-    anotherCluster.clusterIds.forEach(clusterId => this.clusterIds.add(clusterId));
-  }
-
-  intersectsWith(anotherCluster: Cluster): boolean {
-    for (const address of this.addresses) {
-      if (anotherCluster.addresses.has(address)) return true;
-    }
-    for (const clusterId of this.clusterIds) {
-      if (anotherCluster.clusterIds.has(clusterId)) return true;
-    }
-    return false;
-  }
-
-  clusterIdsSorted(): number[] {
-    return Array.from(this.clusterIds).sort((a, b) => a-b);
-  }
-
-}

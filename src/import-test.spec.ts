@@ -4,6 +4,7 @@ import EncodingDown from 'encoding-down';
 import LevelUp from 'levelup';
 import 'mocha';
 import rocksdb from 'rocksdb';
+import { BlockWithTransactions } from './app/models/block';
 import { BlockImportService } from './app/services/block-import-service';
 import { BlockService } from './app/services/block-service';
 import { ClusterAddressService } from './app/services/cluster-address-service';
@@ -39,58 +40,99 @@ describe('Save a blocks with 3 transactions', () => {
     await blockImportService.saveBlock(b1);
   });
 
-  let b1 = {
-    "hash":"000000043657e82e2123aca9d10917f766c41d94efb1243d59d248542d2604af",
-    "height":2710,
-    "tx":[
+
+  let b1: BlockWithTransactions = {
+    confirmations: null,
+    size: null,
+    version: null,
+    merkleroot: null,
+    time: null,
+    nonce: null,
+    bits: null,
+    difficulty: null,
+    chainwork: null,
+
+    hash:"000000043657e82e2123aca9d10917f766c41d94efb1243d59d248542d2604af",
+    height:2710,
+    tx :[
       {
-        "txid":"tx1",//create balances from coinbase
-        "vin":[
+        version: null,
+        size: null,
+        locktime: null,
+        txid:"tx1",//create balances from coinbase
+        vin:[
           {
-            "coinbase":"02960a011e062f503253482f"
+            "coinbase":"02960a011e062f503253482f",
+            scriptSig: null,
+            sequence: null
           }
         ],
-        "vout":[
+        vout:[
           {
             "value":10/100000000,
             "scriptPubKey":{
               "addresses":[
                   "address1"
-              ]
-            }
+              ],
+              asm: null,
+              hex: null,
+              type: null,
+              reqSigs: null,
+            },
+            n: null
           },
           {
             "value":10/100000000,
             "scriptPubKey":{
               "addresses":[
                   "address2"
-              ]
-            }
+              ],
+              asm: null,
+              hex: null,
+              type: null,
+              reqSigs: null,
+            },
+            n: null
           },
           {
             "value":10/100000000,
             "scriptPubKey":{
               "addresses":[
                   "address3"
-              ]
-            }
+              ],
+              asm: null,
+              hex: null,
+              type: null,
+              reqSigs: null,
+            },
+            n: null
           },
           {
             "value":10/100000000,
             "scriptPubKey":{
               "addresses":[
                   "address4"
-              ]
-            }
+              ],
+              asm: null,
+              hex: null,
+              type: null,
+              reqSigs: null,
+            },
+            n: null
           }
         ]
       },
       {
+        version: null,
+        size: null,
+        locktime: null,
         "txid":"tx2",//spend from address1 to address2 and address3
         "vin":[
             {
               "value":2/100000000,
-              "address":"address1"
+              "address":"address1",
+              scriptSig: null,
+              sequence: null
             }
         ],
         "vout":[
@@ -99,29 +141,46 @@ describe('Save a blocks with 3 transactions', () => {
             "scriptPubKey":{
               "addresses":[
                 "address2"
-              ]
-            }
+              ],
+              asm: null,
+              hex: null,
+              type: null,
+              reqSigs: null,
+            },
+            n: null
           },
           {
             "value":1/100000000,
             "scriptPubKey":{
               "addresses":[
                 "address3"
-              ]
-            }
+              ],
+              asm: null,
+              hex: null,
+              type: null,
+              reqSigs: null,
+            },
+            n: null
           }
         ]
       },
       {
+        version: null,
+        size: null,
+        locktime: null,
         "txid":"tx3",//send from address3 and address4 to address 2
         "vin":[
             {
               "value":11/100000000,
-              "address":"address3"
+              "address":"address3",
+              scriptSig: null,
+              sequence: null
             },
             {
               "value":10/100000000,
-              "address":"address4"
+              "address":"address4",
+              scriptSig: null,
+              sequence: null
             }
         ],
         "vout":[
@@ -130,8 +189,13 @@ describe('Save a blocks with 3 transactions', () => {
             "scriptPubKey":{
               "addresses":[
                 "address2"
-              ]
-            }
+              ],
+              asm: null,
+              hex: null,
+              type: null,
+              reqSigs: null,
+            },
+            n: null
           }
         ]
       }

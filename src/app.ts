@@ -5,6 +5,8 @@ import levelup from 'levelup';
 import RocksDB from 'rocksdb';
 import { Readable, Transform, Writable } from 'stream';
 import { ClusterController } from './app/controllers/cluster-controller';
+import { Block, BlockWithTransactions } from './app/models/block';
+import { Transaction } from './app/models/transaction';
 import { BlockImportService } from './app/services/block-import-service';
 import { BlockService } from './app/services/block-service';
 import { ClusterAddressService } from './app/services/cluster-address-service';
@@ -48,7 +50,7 @@ async function getBlockByHash(hash: string) {
   });
 }
 
-async function decodeRawTransactionsHelper(rawtxs: any[]) {
+async function decodeRawTransactionsHelper(rawtxs: any[]): Promise<Transaction[]> {
   let batchCall = () => {
     rawtxs.forEach(rawtx => rpc.decodeRawTransaction(rawtx));
   }
@@ -64,7 +66,7 @@ async function decodeRawTransactionsHelper(rawtxs: any[]) {
   });
 }
 
-async function decodeRawTransactions(rawtxs: any[]) {
+async function decodeRawTransactions(rawtxs: any[]): Promise<Transaction[]> {
   let res = [];
   let from = 0;
   while (from < rawtxs.length) {
@@ -75,7 +77,7 @@ async function decodeRawTransactions(rawtxs: any[]) {
   return res;
 }
 
-async function getRawTransactionsHelper(txids: string[]) {
+async function getRawTransactionsHelper(txids: string[]): Promise<string[]> {
   let batchCall = () => {
     txids.forEach(txid => rpc.getRawTransaction(txid));
   }
@@ -88,8 +90,8 @@ async function getRawTransactionsHelper(txids: string[]) {
   });  
 }
 
-async function getRawTransactions(txids: string[]) {
-  let res = [];
+async function getRawTransactions(txids: string[]): Promise<string[]> {
+  let res: string[] = [];
   let from = 0;
   while (from < txids.length) {
     let rawtxs = await getRawTransactionsHelper(txids.slice(from, from+500));//To avoid HTTP 413 error
@@ -104,11 +106,10 @@ class attachTransactons extends Transform {
     super({
       objectMode: true,
       highWaterMark: 64,
-      transform: async (block, encoding, callback) => {
+      transform: async (block: Block, encoding, callback) => {
         let rawtxs = await getRawTransactions(block.tx);
-        let txs = await decodeRawTransactions(rawtxs);
-        block.tx = txs;
-        this.push(block);
+        let txs: Transaction[] = await decodeRawTransactions(rawtxs);
+        this.push(new BlockWithTransactions(block, txs));
         callback();
       }
     });
@@ -120,7 +121,7 @@ class attachInputs extends Transform {
     super({
       objectMode: true,
       highWaterMark: 64,
-      transform: async (block, encoding, callback) => {
+      transform: async (block: BlockWithTransactions, encoding, callback) => {
         let input_txids = [];
         block.tx.forEach((tx, n) => {
           tx.vin.forEach(vin => {
@@ -172,7 +173,7 @@ class BlockReader extends Readable {
         if (this.currentHeight !== undefined && this.currentHeight > stopHeight) 
           this.push(null);
         else while (true) {
-          let block = await getBlockByHash(this.currentHash);
+          let block: Block = await getBlockByHash(this.currentHash);
           /*let rawtxs = await getRawTransactions(block.tx);
           let txs = await decodeRawTransactions(rawtxs);
           let input_txids = [];
@@ -256,7 +257,7 @@ async function doProcessing() {
     blockWriter = new Writable({
       objectMode: true,
       highWaterMark: 64,
-      write: async (block, encoding, callback) => {
+      write: async (block: BlockWithTransactions, encoding, callback) => {
         await blockImportService.blockMerging(block);
         callback(null);
       }
@@ -268,7 +269,7 @@ async function doProcessing() {
     blockWriter = new Writable({
       objectMode: true,
       highWaterMark: 64,
-      write: async (block, encoding, callback) => {
+      write: async (block: BlockWithTransactions, encoding, callback) => {
         await blockImportService.saveBlockTransactions(block);
         callback(null);
       }

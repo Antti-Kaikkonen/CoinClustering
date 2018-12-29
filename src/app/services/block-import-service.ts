@@ -220,19 +220,6 @@ export class BlockImportService {
     });
 
     this.mergeIntersectingClusters(newClusters);
-    /*for (let i = 0; i < newClusters.length; i++) {
-      let ii = 0;
-      let clusterA = newClusters[i];
-      while (ii < newClusters.length) {
-        let clusterB = newClusters[ii];
-        if (ii !== i && clusterA.intersectsWith(clusterB)) {
-          clusterA.mergeFrom(clusterB);
-          newClusters.splice(ii, 1);
-        } else {
-          ii++;
-        }
-      }
-    }*/
 
     for (let i = 0; i < txs.length; i++) {
       let txAddresses = txToAddressesNotToCluster.get(i);

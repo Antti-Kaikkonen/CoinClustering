@@ -2,6 +2,7 @@ import RpcClient from 'bitcoind-rpc';
 import encoding from 'encoding-down';
 import express from 'express';
 import levelup from 'levelup';
+import LRU, { Cache } from 'lru-cache';
 import RocksDB from 'rocksdb';
 import { Readable, Transform, Writable } from 'stream';
 import { ClusterController } from './app/controllers/cluster-controller';
@@ -11,6 +12,8 @@ import { BlockImportService } from './app/services/block-import-service';
 import { BlockService } from './app/services/block-service';
 import { ClusterAddressService } from './app/services/cluster-address-service';
 import { ClusterBalanceService } from './app/services/cluster-balance-service';
+
+let utxoCache: Cache<string, {value: number, addresses: string[]}> = new LRU({max: 1000000});
 
 let cwd = process.cwd();
 let args = process.argv.slice(2);
@@ -69,11 +72,15 @@ async function decodeRawTransactionsHelper(rawtxs: any[]): Promise<Transaction[]
 async function decodeRawTransactions(rawtxs: any[]): Promise<Transaction[]> {
   let res = [];
   let from = 0;
+  let promises = [];
   while (from < rawtxs.length) {
-    let txs = await decodeRawTransactionsHelper(rawtxs.slice(from, from+500));//To avoid HTTP 413 error
-    txs.forEach(tx => res.push(tx));
-    from+=500;
+    promises.push(decodeRawTransactionsHelper(rawtxs.slice(from, from+100)));
+    //let txs = await decodeRawTransactionsHelper(rawtxs.slice(from, from+100));//To avoid HTTP 413 error
+    //txs.forEach(tx => res.push(tx));
+    from+=100;
   }
+  let batches = await Promise.all(promises);
+  batches.forEach(txs => txs.forEach(tx =>res.push(tx)));
   return res;
 }
 
@@ -93,22 +100,31 @@ async function getRawTransactionsHelper(txids: string[]): Promise<string[]> {
 async function getRawTransactions(txids: string[]): Promise<string[]> {
   let res: string[] = [];
   let from = 0;
+  let promises = [];
   while (from < txids.length) {
-    let rawtxs = await getRawTransactionsHelper(txids.slice(from, from+500));//To avoid HTTP 413 error
-    rawtxs.forEach(rawtx => res.push(rawtx));
+    promises.push(getRawTransactionsHelper(txids.slice(from, from+500)));//To avoid HTTP 413 error
     from+=500;
   }
+  let batches = await Promise.all(promises);
+  batches.forEach(rawtxs => rawtxs.forEach(rawtx =>res.push(rawtx)));
   return res;
 }
+
+//let utxoCache: Map<string, {value: number, addresses: string[]}> = new Map();
 
 class attachTransactons extends Transform {
   constructor() {
     super({
       objectMode: true,
-      highWaterMark: 64,
+      //highWaterMark: 256,
       transform: async (block: Block, encoding, callback) => {
         let rawtxs = await getRawTransactions(block.tx);
         let txs: Transaction[] = await decodeRawTransactions(rawtxs);
+        txs.forEach(tx => {
+          tx.vout.forEach(vout => {
+            utxoCache.set(tx.txid+";"+vout.n, {value:vout.value, addresses: vout.scriptPubKey.addresses});
+          });
+        });
         this.push(new BlockWithTransactions(block, txs));
         callback();
       }
@@ -116,22 +132,39 @@ class attachTransactons extends Transform {
   }
 }
 
+let cacheHits: number = 0;
+let cacheMisses: number = 0;
+
 class attachInputs extends Transform {
+  
   constructor() {
     super({
       objectMode: true,
-      highWaterMark: 64,
+      //highWaterMark: 256,
       transform: async (block: BlockWithTransactions, encoding, callback) => {
         let input_txids = [];
         block.tx.forEach((tx, n) => {
           tx.vin.forEach(vin => {
             if (vin.coinbase) return;
             if (vin.value === undefined) {
-              let foundTx = block.tx.slice(0, n).find(tx => tx.txid === vin.txid);
-              if (foundTx !== undefined) {
-                vin.value = foundTx.vout[vin.vout].value;
-                let pubkey = foundTx.vout[vin.vout].scriptPubKey;
-                if (pubkey.addresses && pubkey.addresses.length === 1) vin.address = pubkey.addresses[0];
+              let utxo: {addresses: string[], value: number};
+              if (utxoCache.has(vin.txid+";"+vin.vout)) {
+                cacheHits++;
+                utxo = utxoCache.peek(vin.txid+";"+vin.vout);
+                utxoCache.del(vin.txid+";"+vin.vout);
+              } else {
+                cacheMisses++;
+                let foundTx = block.tx.slice(0, n).find(tx => tx.txid === vin.txid);
+                if (foundTx !== undefined) {
+                  utxo = {
+                    addresses: foundTx.vout[vin.vout].scriptPubKey.addresses,
+                    value: foundTx.vout[vin.vout].value
+                  };
+                }  
+              }
+              if (utxo !== undefined) {
+                vin.value = utxo.value;
+                if (utxo.addresses && utxo.addresses.length === 1) vin.address = utxo.addresses[0];
               } else {
                 if (input_txids.indexOf(vin.txid) >= 0) return;
                 input_txids.push(vin.txid);
@@ -140,6 +173,7 @@ class attachInputs extends Transform {
           });
         });
         if (input_txids.length > 0) {
+          console.log("attaching inputs...", input_txids.length);
           let txs2 = await decodeRawTransactions(await getRawTransactions(input_txids));
           block.tx.forEach(tx => {
             tx.vin.forEach(vin => {
@@ -168,46 +202,12 @@ class BlockReader extends Readable {
   constructor(hash: string, stopHeight: number) {
     super({
       objectMode: true,
-      highWaterMark: 64,
+      //highWaterMark: 256,
       read: async (size) => {
         if (this.currentHeight !== undefined && this.currentHeight > stopHeight) 
           this.push(null);
         else while (true) {
           let block: Block = await getBlockByHash(this.currentHash);
-          /*let rawtxs = await getRawTransactions(block.tx);
-          let txs = await decodeRawTransactions(rawtxs);
-          let input_txids = [];
-          txs.forEach(tx => {
-            tx.vin.forEach(vin => {
-              if (vin.coinbase) return;
-              if (vin.value === undefined) {
-                let index = block.tx.indexOf(vin.txid);
-                if (index >= 0) {
-                  vin.value = txs[index].vout[vin.vout].value;
-                  let pubkey = txs[index].vout[vin.vout].scriptPubKey;
-                  if (pubkey.addresses && pubkey.addresses.length === 1) vin.address = pubkey.addresses[0];
-                }
-                if (input_txids.indexOf(vin.txid) >= 0) return;
-                input_txids.push(vin.txid);
-              }
-            });
-          });
-          if (input_txids.length > 0) {
-            let rawtxs2 = await getRawTransactions(input_txids);
-            let txs2 = await decodeRawTransactions(rawtxs2);
-            txs.forEach(tx => {
-              tx.vin.forEach(vin => {
-                if (vin.coinbase) return;
-                if (vin.value === undefined) {
-                  let index = input_txids.indexOf(vin.txid);
-                  vin.value = txs2[index].vout[vin.vout].value;
-                  let pubkey = txs2[index].vout[vin.vout].scriptPubKey;
-                  if (pubkey.addresses && pubkey.addresses.length === 1) vin.address = pubkey.addresses[0];
-                }  
-              });
-            });      
-          }
-          block.tx = txs;*/
           this.currentHash = block.nextblockhash;
           this.currentHeight = block.height+1;
           let shouldBreak = this.push(block);
@@ -236,14 +236,6 @@ doProcessing();
 async function doProcessing() {
   let height = await getRpcHeight();
   console.log("rpc height", height);
-  /*let tipInfo = await blockService.getTipInfo();
-  console.log("tipInfo", tipInfo);
-  if (tipInfo !== undefined && tipInfo.reorgDepth > 0) {
-    //TODO: process reorg
-    await doProcessing();
-    return;
-  }
-  let hash = await blockService.getRpcBlockHash(tipInfo !== undefined ? tipInfo.lastSavedHeight+1 : 1);*/
   let lastMergedHeight: number = await blockImportService.getLastMergedHeight();
   let lastSavedTxHeight: number = await blockImportService.getLastSavedTxHeight();
   let blockWriter: Writable;
@@ -256,7 +248,7 @@ async function doProcessing() {
     console.log("merging between blocks", startHeight, "and", toHeight);
     blockWriter = new Writable({
       objectMode: true,
-      highWaterMark: 64,
+      //highWaterMark: 256,
       write: async (block: BlockWithTransactions, encoding, callback) => {
         await blockImportService.blockMerging(block);
         callback(null);
@@ -268,7 +260,7 @@ async function doProcessing() {
     console.log("saving transactions between blocks", startHeight, "and", toHeight);
     blockWriter = new Writable({
       objectMode: true,
-      highWaterMark: 64,
+      //highWaterMark: 256,
       write: async (block: BlockWithTransactions, encoding, callback) => {
         await blockImportService.saveBlockTransactions(block);
         callback(null);
@@ -278,14 +270,23 @@ async function doProcessing() {
     setTimeout(doProcessing, 10000);
     return;
   }
-
+  if (startHeight === 0) utxoCache.reset();
   let startHash: string = await blockService.getRpcBlockHash(startHeight);
   let blockReader = new BlockReader(startHash, toHeight);
-  blockReader.pipe(new attachTransactons()).pipe(new attachInputs()).pipe(blockWriter);
-  //blockReader.pipe(blockWriter);
+  let txAttacher = new attachTransactons();
+  let inputAttacher = new attachInputs();
+  blockReader.pipe(txAttacher).pipe(inputAttacher).pipe(blockWriter);
   blockReader.on('end', () => {
   });
   blockWriter.on('finish', () => {
     setTimeout(doProcessing, 0);
   });
+  setInterval(()=>{
+    console.log("blockReader",blockReader.readableLength);
+    console.log("txAttacher", txAttacher.readableLength, txAttacher.writableLength);
+    console.log("inputAttacher", inputAttacher.readableLength, inputAttacher.writableLength);
+    console.log("blockWriter", blockWriter.writableLength);
+    console.log("cacheHit rate: "+ cacheHits/(cacheHits+cacheMisses) );
+    console.log("utxocache length", utxoCache.length);
+  }, 5000);
 }

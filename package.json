@@ -17,6 +17,7 @@
     "express": "^4.16.4",
     "levelup": "^3.1.1",
     "lexicographic-integer": "^1.1.0",
+    "lru-cache": "^5.1.1",
     "rocksdb": "^3.0.2"
   },
   "devDependencies": {
@@ -26,13 +27,14 @@
     "@types/es6-promise": "^3.3.0",
     "@types/express": "^4.16.0",
     "@types/levelup": "^3.1.0",
+    "@types/lru-cache": "^4.1.1",
     "@types/mocha": "^5.2.5",
     "@types/node": "^10.12.12",
     "@types/rocksdb": "^3.0.0",
     "chai": "^4.2.0",
     "mocha": "^5.2.0",
-    "typescript": "^3.1.6",
-    "ts-node": "^7.0.1"
+    "ts-node": "^7.0.1",
+    "typescript": "^3.1.6"
   },
   "author": "Antti Kaikkonen",
   "repository": {

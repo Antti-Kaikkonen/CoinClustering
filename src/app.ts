@@ -13,7 +13,12 @@ import { BlockService } from './app/services/block-service';
 import { ClusterAddressService } from './app/services/cluster-address-service';
 import { ClusterBalanceService } from './app/services/cluster-balance-service';
 
-let utxoCache: Cache<string, {value: number, addresses: string[]}> = new LRU({max: 1000000});
+
+
+//export NODE_OPTIONS="--max_old_space_size=4096 or 8192
+
+
+let outputCache: Cache<string, {value: number, addresses: string[]}> = new LRU({max: 3000000});
 
 let cwd = process.cwd();
 let args = process.argv.slice(2);
@@ -23,7 +28,7 @@ var rpc = new RpcClient(config);
 let rocksdb = RocksDB(cwd+'/db');
 let db = levelup(encoding(rocksdb), {
   writeBufferSize: 8 * 1024 * 1024,
-  cacheSize: 1024 * 1024 * 1024
+  cacheSize: 256 * 1024 * 1024
 });
 
 let clusterBalanceService = new ClusterBalanceService(db);
@@ -39,7 +44,6 @@ let blockImportService = new BlockImportService(db, clusterAddressService, clust
 const app = express();
 app.get("/hello", clusterController.clusterCurrentBalances);
 app.get("/hello2", clusterController.clusterTransactions);
-app.get("/hello3", clusterController.clusterAddresses);
 app.get('/cluster_addresses/:id', clusterController.clusterAddresses);
 app.listen(config.listen_port);
 
@@ -69,15 +73,20 @@ async function decodeRawTransactionsHelper(rawtxs: any[]): Promise<Transaction[]
   });
 }
 
+
+//Each batch is executed concurrently in bitcoin core so making this value too large can lower performance. Too low value will increase overhead and exchaust rpcworkqueue
+//Recommended to set rpcworkqueue=1024 and rpcthreads=64 in bitcoin.conf.
+let rpc_batch_size = 10;
+
 async function decodeRawTransactions(rawtxs: any[]): Promise<Transaction[]> {
   let res = [];
   let from = 0;
   let promises = [];
   while (from < rawtxs.length) {
-    promises.push(decodeRawTransactionsHelper(rawtxs.slice(from, from+100)));
+    promises.push(decodeRawTransactionsHelper(rawtxs.slice(from, from+rpc_batch_size)));
     //let txs = await decodeRawTransactionsHelper(rawtxs.slice(from, from+100));//To avoid HTTP 413 error
     //txs.forEach(tx => res.push(tx));
-    from+=100;
+    from+=rpc_batch_size;
   }
   let batches = await Promise.all(promises);
   batches.forEach(txs => txs.forEach(tx =>res.push(tx)));
@@ -102,8 +111,8 @@ async function getRawTransactions(txids: string[]): Promise<string[]> {
   let from = 0;
   let promises = [];
   while (from < txids.length) {
-    promises.push(getRawTransactionsHelper(txids.slice(from, from+500)));//To avoid HTTP 413 error
-    from+=500;
+    promises.push(getRawTransactionsHelper(txids.slice(from, from+rpc_batch_size)));//To avoid HTTP 413 error
+    from+=rpc_batch_size;
   }
   let batches = await Promise.all(promises);
   batches.forEach(rawtxs => rawtxs.forEach(rawtx =>res.push(rawtx)));
@@ -122,7 +131,7 @@ class attachTransactons extends Transform {
         let txs: Transaction[] = await decodeRawTransactions(rawtxs);
         txs.forEach(tx => {
           tx.vout.forEach(vout => {
-            utxoCache.set(tx.txid+";"+vout.n, {value:vout.value, addresses: vout.scriptPubKey.addresses});
+            outputCache.set(tx.txid+";"+vout.n, {value:vout.value, addresses: vout.scriptPubKey.addresses});
           });
         });
         this.push(new BlockWithTransactions(block, txs));
@@ -148,10 +157,10 @@ class attachInputs extends Transform {
             if (vin.coinbase) return;
             if (vin.value === undefined) {
               let utxo: {addresses: string[], value: number};
-              if (utxoCache.has(vin.txid+";"+vin.vout)) {
+              if (outputCache.has(vin.txid+";"+vin.vout)) {
                 cacheHits++;
-                utxo = utxoCache.peek(vin.txid+";"+vin.vout);
-                utxoCache.del(vin.txid+";"+vin.vout);
+                utxo = outputCache.peek(vin.txid+";"+vin.vout);
+                outputCache.del(vin.txid+";"+vin.vout);
               } else {
                 cacheMisses++;
                 let foundTx = block.tx.slice(0, n).find(tx => tx.txid === vin.txid);
@@ -270,7 +279,7 @@ async function doProcessing() {
     setTimeout(doProcessing, 10000);
     return;
   }
-  if (startHeight === 0) utxoCache.reset();
+  if (startHeight === 0) outputCache.reset();
   let startHash: string = await blockService.getRpcBlockHash(startHeight);
   let blockReader = new BlockReader(startHash, toHeight);
   let txAttacher = new attachTransactons();
@@ -287,6 +296,6 @@ async function doProcessing() {
     console.log("inputAttacher", inputAttacher.readableLength, inputAttacher.writableLength);
     console.log("blockWriter", blockWriter.writableLength);
     console.log("cacheHit rate: "+ cacheHits/(cacheHits+cacheMisses) );
-    console.log("utxocache length", utxoCache.length);
+    console.log("utxocache length", outputCache.length);
   }, 5000);
 }

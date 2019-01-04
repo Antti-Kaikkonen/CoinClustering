@@ -36,7 +36,8 @@ let leveldown = LevelDOWN(cwd+'/db');
 
 let db = new BinaryDB(EncodingDown<Buffer, Buffer>(leveldown, {keyEncoding: 'binary', valueEncoding: 'binary'}), {
   writeBufferSize: 8 * 1024 * 1024,
-  cacheSize: 256 * 1024 * 1024
+  cacheSize: 256 * 1024 * 1024,
+  compression: false
 });
 
 let clusterBalanceService = new ClusterBalanceService(db);
@@ -92,8 +93,11 @@ async function decodeRawTransactions(rawtxs: any[]): Promise<Transaction[]> {
   let promises = [];
   while (from < rawtxs.length) {
     promises.push(decodeRawTransactionsHelper(rawtxs.slice(from, from+rpc_batch_size)));
-    //let txs = await decodeRawTransactionsHelper(rawtxs.slice(from, from+100));//To avoid HTTP 413 error
-    //txs.forEach(tx => res.push(tx));
+    if (promises.length > 500) {
+      let batches = await Promise.all(promises);
+      batches.forEach(txs => txs.forEach(tx =>res.push(tx)));
+      promises = [];
+    }
     from+=rpc_batch_size;
   }
   let batches = await Promise.all(promises);
@@ -120,6 +124,12 @@ async function getRawTransactions(txids: string[]): Promise<string[]> {
   let promises = [];
   while (from < txids.length) {
     promises.push(getRawTransactionsHelper(txids.slice(from, from+rpc_batch_size)));//To avoid HTTP 413 error
+
+    if (promises.length > 500) {
+      let batches = await Promise.all(promises);
+      batches.forEach(txs => txs.forEach(tx =>res.push(tx)));
+      promises = [];
+    }
     from+=rpc_batch_size;
   }
   let batches = await Promise.all(promises);

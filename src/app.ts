@@ -1,8 +1,8 @@
 import RpcClient from 'bitcoind-rpc';
 import EncodingDown from 'encoding-down';
 import express from 'express';
+import LevelDOWN from 'leveldown';
 import LRU, { Cache } from 'lru-cache';
-import RocksDB from 'rocksdb';
 import { Readable, Transform, Writable } from 'stream';
 import { ClusterController } from './app/controllers/cluster-controller';
 import { Block, BlockWithTransactions } from './app/models/block';
@@ -30,12 +30,11 @@ const config: any = require(cwd+'/config');
 console.log("repaired");*/
 
 
-
 var rpc = new RpcClient(config);
-let rocksdb = RocksDB(cwd+'/db');
+let leveldown = LevelDOWN(cwd+'/db');
 
 
-let db = new BinaryDB(EncodingDown<Buffer, Buffer>(rocksdb, {keyEncoding: 'binary', valueEncoding: 'binary'}), {
+let db = new BinaryDB(EncodingDown<Buffer, Buffer>(leveldown, {keyEncoding: 'binary', valueEncoding: 'binary'}), {
   writeBufferSize: 8 * 1024 * 1024,
   cacheSize: 256 * 1024 * 1024
 });

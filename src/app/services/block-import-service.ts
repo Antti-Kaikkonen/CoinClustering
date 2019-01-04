@@ -1,20 +1,37 @@
 import { AbstractBatch } from "abstract-leveldown";
-import { LevelUp } from "levelup";
 import { BlockWithTransactions } from "../models/block";
 import { Cluster } from "../models/cluster";
 import { Transaction } from "../models/transaction";
+import { AddressClusterTable } from "../tables/address-cluster-table";
+import { ClusterMergedToTable } from "../tables/cluster-merged-to-table";
+import { LastMergedHeightTable } from "../tables/last-merged-height-table";
+import { LastSavedTxHeightTable } from "../tables/last-saved-tx-height-table";
+import { LastSavedTxNTable } from "../tables/last-saved-tx-n-table";
+import { NextClusterIdTable } from "../tables/next-cluster-id-table";
+import { BinaryDB } from "./binary-db";
 import { BlockService } from "./block-service";
 import { ClusterAddressService } from "./cluster-address-service";
 import { ClusterBalanceService } from "./cluster-balance-service";
-import { db_address_cluster_prefix, db_cluster_merged_to, db_last_merged_block_height, db_last_saved_tx_height, db_last_saved_tx_n, db_next_cluster_id } from "./db-constants";
 
 export class BlockImportService {
 
-  constructor(private db: LevelUp,
+  addressClusterTable: AddressClusterTable;
+  clusterMergedToTable: ClusterMergedToTable;
+  nextClusterIdTable: NextClusterIdTable;
+  lastMergedHeightTable: LastMergedHeightTable;
+  lastSavedTxHeightTable: LastSavedTxHeightTable;
+  lastSavedTxNTable: LastSavedTxNTable;
+
+  constructor(private db: BinaryDB,
     private clusterAddressService: ClusterAddressService, 
     private clusterBalanceService: ClusterBalanceService,
     private blockService: BlockService) {
-
+      this.addressClusterTable = new AddressClusterTable(db);
+      this.clusterMergedToTable = new ClusterMergedToTable(db);
+      this.nextClusterIdTable = new NextClusterIdTable(db);
+      this.lastMergedHeightTable = new LastMergedHeightTable(db);
+      this.lastSavedTxHeightTable = new LastSavedTxHeightTable(db);
+      this.lastSavedTxNTable = new LastSavedTxNTable(db);
   }  
 
   lastMergedHeight: number;
@@ -39,7 +56,7 @@ export class BlockImportService {
     return addressToDelta;
   }
   
-  private async addressBalanceChangesToClusterBalanceChanges2(addressToDelta: Map<string, number>, addressToClusterId: Map<string, number>): Promise<Map<string, number>> {
+  /*private async addressBalanceChangesToClusterBalanceChanges2(addressToDelta: Map<string, number>, addressToClusterId: Map<string, number>): Promise<Map<string, number>> {
     let promises = [];
     let addresses = [];
     addressToDelta.forEach((delta: number, address: string) => {
@@ -61,19 +78,20 @@ export class BlockImportService {
       clusterToDelta.set(clusterId, oldBalance+addressDelta);
     });
     return clusterToDelta;
-  }
+  }*/
 
   private async addressBalanceChangesToClusterBalanceChanges(addressToDelta: Map<string, number>): Promise<Map<string, number>> {
     let promises = [];
     let addresses = [];
     addressToDelta.forEach((delta: number, address: string) => {
       addresses.push(address);
-      promises.push(this.db.get(db_address_cluster_prefix+address));
+      promises.push(this.addressClusterTable.get({address: address}));
+      //promises.push(this.db.get(db_address_cluster_prefix+address));
     });
     let clusterIds = await Promise.all(promises);
     let clusterToDelta = new Map<string, number>();
     addresses.forEach((address: string, index: number) => {
-      let clusterId = clusterIds[index];
+      let clusterId = clusterIds[index].clusterId;
       if (clusterId === undefined) throw Error("Cluster missing");
       let oldBalance = clusterToDelta.get(clusterId);
       let addressDelta = addressToDelta.get(address);
@@ -108,20 +126,24 @@ export class BlockImportService {
     return true;
   }
   
-  private async getAddressClusterInfo(address: string) {
-    return new Promise<{address: string, clusterId?: number}>((resolve, reject) => {
-      this.db.get(db_address_cluster_prefix+address, (error, clusterId: string) => {
+  private async getAddressClusterInfo(address: string): Promise<{address: string, clusterId?: number}> {
+    try {
+      let cluster = await this.addressClusterTable.get({address: address});
+      return {address: address, clusterId: cluster.clusterId};
+    } catch(err) {
+      return {address: address};
+    }  
+      /*this.db.get(db_address_cluster_prefix+address, (error, clusterId: string) => {
         if (clusterId !== undefined) {
           resolve( { address: address, clusterId: Number(clusterId) });
         } else {
           resolve({address: address});
         }
-      });
-    });
+      });*/
   }
 
   async processClusters(clusters: Cluster[], lastBlockHeight: number) {
-    let ops: AbstractBatch[] = [];
+    let ops: AbstractBatch<Buffer, Buffer>[] = [];
     let promises: Promise<any>[] = [];
     for (let cluster of clusters) {
       let clusterIds: number[] = cluster.clusterIdsSorted();
@@ -137,11 +159,14 @@ export class BlockImportService {
           promises.push(this.clusterAddressService.mergeClusterAddressesOps(toClusterId, fromClusters, clusterAddresses));
           if (fromClusters.length > 0 && await this.getLastSavedTxHeight() > -1) promises.push(this.clusterBalanceService.mergeClusterTransactionsOps(toClusterId, ...fromClusters));
           fromClusters.forEach(fromClusterId => {
-            ops.push({
+            ops.push(
+              this.clusterMergedToTable.putOperation({fromClusterId: fromClusterId}, {toClusterId: toClusterId})
+            );
+            /*ops.push({
               type:"put",
               key:db_cluster_merged_to+fromClusterId,
               value:toClusterId
-            })
+            })*/
           });
         }
       }  
@@ -149,19 +174,25 @@ export class BlockImportService {
     let v = await Promise.all(promises);
     v.forEach(opGroup => opGroup.forEach(op => ops.push(op)));
 
-    ops.push({
+    ops.push(
+      this.lastMergedHeightTable.putOperation(undefined, {height:lastBlockHeight})
+    );
+    /*ops.push({
       type:"put",
       key:db_last_merged_block_height,
       value:lastBlockHeight
-    });
-    ops.push({
+    });*/
+    ops.push(
+      this.nextClusterIdTable.putOperation(undefined, {nextClusterId: await this.getNextClusterId()})
+    );
+    /*ops.push({
       type:"put",
       key:db_next_cluster_id,
       value: await this.getNextClusterId()
-    });
+    });*/
 
     if (ops.length > 1000) console.log("ops.length: ", ops.length);
-    await this.db.batch(ops);
+    await this.db.batchBinary(ops);
   }
 
 
@@ -233,6 +264,7 @@ export class BlockImportService {
         }
       });  
     }
+    //console.log("newClusters", newClusters);
     return newClusters;
   }
 
@@ -279,24 +311,31 @@ export class BlockImportService {
       }
     }
     this.lastSavedTxHeight = block.height;
-    let ops: AbstractBatch[] = [];
-    ops.push({
+    let ops: AbstractBatch<Buffer, Buffer>[] = [];
+    ops.push(
+      this.lastSavedTxHeightTable.putOperation(undefined, {height: block.height})
+    );
+    /*ops.push({
       type: "put",
       key: db_last_saved_tx_height,
       value: block.height
-    });
-    ops.push({
+    });*/
+    ops.push(
+      this.lastSavedTxNTable.delOperation(undefined)
+    )
+    /*ops.push({
       type: "del",
       key: db_last_saved_tx_n
-    });
-    await this.db.batch(ops);
+    });*/
+    await this.db.batchBinary(ops);
     this.lastSavedTxN = -1;
   }
 
   async getLastMergedHeight(): Promise<number> {
     if (this.lastMergedHeight === undefined) {
       try {
-        this.lastMergedHeight = Number(await this.db.get(db_last_merged_block_height));
+        this.lastMergedHeight = (await this.lastMergedHeightTable.get(undefined)).height;
+        //this.lastMergedHeight = Number(await this.db.get(db_last_merged_block_height));
       } catch (err) {
         this.lastMergedHeight = -1;
       }
@@ -307,7 +346,8 @@ export class BlockImportService {
   async getLastSavedTxHeight(): Promise<number> {
     if (this.lastSavedTxHeight === undefined) {
       try {
-        this.lastSavedTxHeight = Number(await this.db.get(db_last_saved_tx_height));
+        this.lastSavedTxHeight = (await this.lastSavedTxHeightTable.get(undefined)).height;
+        //this.lastSavedTxHeight = Number(await this.db.get(db_last_saved_tx_height));
       } catch (err) {
         this.lastSavedTxHeight = -1;
       }
@@ -318,7 +358,8 @@ export class BlockImportService {
   private async getLastSavedTxN(): Promise<number> {
     if (this.lastSavedTxN === undefined) {
       try {
-        this.lastSavedTxN = Number(await this.db.get(db_last_saved_tx_n));
+        this.lastSavedTxN = (await this.lastSavedTxNTable.get(undefined)).n;
+        //this.lastSavedTxN = Number(await this.db.get(db_last_saved_tx_n));
       } catch (err) {
         this.lastSavedTxN = -1;
       }
@@ -329,7 +370,8 @@ export class BlockImportService {
   private async getNextClusterId(): Promise<number> {
     if (this.nextClusterId === undefined) {
       try {
-        this.nextClusterId = Number(await this.db.get(db_next_cluster_id));
+        this.nextClusterId = (await this.nextClusterIdTable.get(undefined)).nextClusterId;
+        //this.nextClusterId = Number(await this.db.get(db_next_cluster_id));
       } catch(err) {
         this.nextClusterId = 0;
       }
@@ -338,10 +380,10 @@ export class BlockImportService {
   }
 
   async saveBlock(block: BlockWithTransactions) {
+    console.log("saving block ");
     if (block.height%1000 === 0) {
       console.log(block.height);
     }  
-
     if (block.height > await this.getLastMergedHeight()) {
       await this.blockMerging(block);
       this.lastMergedHeight = block.height;

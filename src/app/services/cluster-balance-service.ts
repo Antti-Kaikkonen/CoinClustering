@@ -1,16 +1,53 @@
 import { AbstractBatch } from 'abstract-leveldown';
-import { LevelUp } from 'levelup';
 import { ClusterBalance } from '../models/cluster-balance';
-import { integer2LexString, lexString2Integer } from '../utils/utils';
-import { db_cluster_balance_count_prefix, db_cluster_balance_prefix, db_cluster_tx_balance_prefix, db_last_saved_tx_n, db_value_separator } from './db-constants';
+import { ClusterBalanceCountTable } from '../tables/cluster-balance-count-table';
+import { ClusterBalanceTable } from '../tables/cluster-balance-table';
+import { ClusterTxBalanceTable } from '../tables/cluster-tx-balance-table';
+import { LastSavedTxNTable } from '../tables/last-saved-tx-n-table';
+import { BinaryDB } from './binary-db';
+import { db_value_separator } from './db-constants';
 
 export class ClusterBalanceService {
   
-  constructor(private db: LevelUp) {
+  clusterBalanceTable: ClusterBalanceTable;
+  clusterTxBalanceTable: ClusterTxBalanceTable;
+  clusterBalanceCountTable: ClusterBalanceCountTable;
+  lastSavedTxNTable: LastSavedTxNTable;
+
+  constructor(private db: BinaryDB) {
+    this.clusterBalanceTable = new ClusterBalanceTable(db);
+    this.clusterTxBalanceTable = new ClusterTxBalanceTable(db);
+    this.clusterBalanceCountTable = new ClusterBalanceCountTable(db);
+    this.lastSavedTxNTable = new LastSavedTxNTable(db);
   }  
 
   async getLast(clusterId: number): Promise<ClusterBalance> {
     
+    return new Promise<ClusterBalance>((resolve, reject) => {
+      let result: ClusterBalance;
+      this.clusterBalanceTable.createReadStream({
+        gte: {clusterId: clusterId, transactionIndex: 0},
+        lt: {clusterId: clusterId, transactionIndex: Number.MAX_SAFE_INTEGER},
+        reverse: true,
+        limit: 1
+      }).on('data', (data) => {
+        result = new ClusterBalance(
+          data.key.transactionIndex,
+          data.value.txid,
+          data.value.balance,
+          data.value.height,
+          data.value.n);
+      }).on('error', function (err) {
+        reject(err);
+      })
+      .on('close', function () {
+        //resolve(result);
+      })
+      .on('end', function () {
+        resolve(result);
+      });
+    });  
+/*
     return new Promise<ClusterBalance>((resolve, reject) => {
       let result: ClusterBalance;
       this.db.createReadStream({
@@ -35,13 +72,15 @@ export class ClusterBalanceService {
       })
       .on('end', function () {
       });
-    });
+    });*/
   }
 
   async getClusterTransaction(clusterId: number, index: number): Promise<ClusterBalance> {
-    let value = await this.db.get(db_cluster_balance_prefix+clusterId+"/"+integer2LexString(index));
-    let valueComponents = value.split(db_value_separator);
-    let cb = new ClusterBalance(index, valueComponents[0], Number(valueComponents[1]), Number(valueComponents[2]), Number(valueComponents[3]));
+    let value = await this.clusterBalanceTable.get({clusterId: clusterId, transactionIndex: index});
+    //let value = await this.db.get(db_cluster_balance_prefix+clusterId+"/"+integer2LexString(index));
+    //let valueComponents = value.split(db_value_separator);
+    let cb = new ClusterBalance(index, value.txid, value.balance, value.height, value.n);
+    //let cb = new ClusterBalance(index, valueComponents[0], Number(valueComponents[1]), Number(valueComponents[2]), Number(valueComponents[3]));
     return cb;
   }
 
@@ -53,9 +92,43 @@ export class ClusterBalanceService {
 
 
   async getClusterTransactionsAfter(clusterId: number, height: number, n: number): Promise<ClusterBalance[]> {
+    
+
     return new Promise<ClusterBalance[]>(async (resolve, reject) => {
       let res: ClusterBalance[] = [];
-      let rs = this.db.createReadStream({
+
+      let rs = this.clusterBalanceTable.createReadStream({
+        gte: {clusterId: clusterId, transactionIndex: 0},
+        lt: {clusterId: clusterId, transactionIndex: Number.MAX_SAFE_INTEGER},
+        reverse: true
+      }).on('data', (data) => {
+        let cb = new ClusterBalance(
+          data.key.transactionIndex,
+          data.value.txid,
+          data.value.balance,
+          data.value.height,
+          data.value.n
+        );
+        if (cb.height > height || cb.height === height && cb.n >= n) {
+          res.unshift(cb);
+        } else {
+          resolve(res);
+          rs['destroy']('no error');
+        }    
+      }).on('error', function (err) {
+        if (err !== "no error") {
+          console.log(err);
+          reject(err);
+        }
+      })
+      .on('close', function () {
+        //resolve(res);
+      })
+      .on('end', function () {
+        resolve(res);
+      });
+
+      /*let rs = this.db.createReadStream({
         gte:db_cluster_balance_prefix+clusterId+"/0",
         lt:db_cluster_balance_prefix+clusterId+"/z",
         reverse: true
@@ -84,13 +157,39 @@ export class ClusterBalanceService {
         resolve(res);
       })
       .on('end', function () {
-      });
+      });*/
     });
   }  
 
   async getClusterTransactions(clusterId: number): Promise<ClusterBalance[]> {
     return new Promise<ClusterBalance[]>((resolve, reject) => {
       let transactions = [];
+      let rs = this.clusterBalanceTable.createReadStream({
+        gte: {clusterId: clusterId, transactionIndex: 0},
+        lt: {clusterId: clusterId, transactionIndex: Number.MAX_SAFE_INTEGER}
+      });
+      rs.on("data", function(data) {
+        let cb = new ClusterBalance(
+          data.key.transactionIndex,
+          data.value.txid,
+          data.value.balance,
+          data.value.height,
+          data.value.n
+        );
+        transactions.push(
+          cb
+        );
+      })
+      .on('error', function (err) {
+        reject(err);
+      })
+      .on('close', function () {
+        //resolve(transactions);
+      })
+      .on('end', function () {
+        resolve(transactions);
+      });
+      /*
       let rs = this.db.createReadStream({
         gte:db_cluster_balance_prefix+clusterId+"/0",
         lt:db_cluster_balance_prefix+clusterId+"/z"
@@ -111,7 +210,7 @@ export class ClusterBalanceService {
         resolve(transactions);
       })
       .on('end', function () {
-      });
+      });*/
     });
   }
 
@@ -144,8 +243,9 @@ export class ClusterBalanceService {
     }
   }
 
-  async mergeClusterTransactionsOps(toCluster: number, ...fromClusters: number[]): Promise<AbstractBatch[]> {
-    let ops: AbstractBatch[] = [];
+  async mergeClusterTransactionsOps(toCluster: number, ...fromClusters: number[]): Promise<AbstractBatch<Buffer, Buffer>[]> {
+    //console.log("MERGING CLUSTER TRANSACTIONS")
+    let ops: AbstractBatch<Buffer, Buffer>[] = [];
     if (fromClusters.length === 0) return ops;
     let transactionsFromPromises = [];
     fromClusters.forEach(fromCluster => transactionsFromPromises.push(this.getClusterTransactions(fromCluster)));
@@ -160,19 +260,30 @@ export class ClusterBalanceService {
 
       transactionsFrom.forEach((tx: any, index: number) => {
         merged.push(tx);
-        ops.push({
+        ops.push(
+          this.clusterBalanceTable.delOperation({clusterId: fromCluster, transactionIndex: tx.id})
+        );
+        /*ops.push({
           type: "del",
           key:db_cluster_balance_prefix+fromCluster+"/"+integer2LexString(tx.id)
-        });
-        ops.push({
+        });*/
+        ops.push(
+          this.clusterTxBalanceTable.delOperation({clusterId: fromCluster, txid:tx.txid})
+        );
+        /*ops.push({
           type: "del",
           key:db_cluster_tx_balance_prefix+fromCluster+"/"+tx.txid
-        });
+        });*/
       });
+      ops.push(
+        this.clusterBalanceCountTable.delOperation({clusterId: fromCluster})
+      );
+      /*let buf = Buffer.allocUnsafe(4);
+      buf.writeUInt32BE(fromCluster, 0);
       ops.push({
         type:"del",
-        key:db_cluster_balance_count_prefix+fromCluster
-      });
+        key:Buffer.concat([db_cluster_balance_count_prefix, buf])
+      });*/
     });
     this.sortAndRemoveDuplicates(merged);
     if (merged.length === 0) return ops;
@@ -211,30 +322,40 @@ export class ClusterBalanceService {
   
     merged.forEach((tx, index: number) => {
       let newIndex = index+skipped;
-      ops.push({
+      ops.push(
+        this.clusterBalanceTable.putOperation({clusterId: toCluster, transactionIndex: newIndex}, {txid: tx.txid, balance: balances[index], height: tx.height, n: tx.n})
+      );
+      /*ops.push({
         type: "put",
         key:db_cluster_balance_prefix+toCluster+"/"+integer2LexString(newIndex),
         value: this.cluster_balance_value(tx.txid, balances[index], tx.height, tx.n)
-      });
-      ops.push({
+      });*/
+      ops.push(
+        this.clusterTxBalanceTable.putOperation({clusterId:toCluster, txid: tx.txid}, {transactionIndex: newIndex, balance: balances[index], height: tx.height, n: tx.n})
+      );
+      /*ops.push({
         type: "put",
         key:db_cluster_tx_balance_prefix+toCluster+"/"+tx.txid,
         value: this.cluster_tx_balance_value(newIndex, balances[index], tx.height, tx.n)
-      });
+      });*/
     });
-    ops.push({
+    ops.push(
+      this.clusterBalanceCountTable.putOperation({clusterId: toCluster}, {balanceCount: merged.length+skipped})
+    );
+    /*ops.push({
       type:"put",
       key:db_cluster_balance_count_prefix+toCluster,
       value:merged.length+skipped
-    });
+    });*/
     return ops;
   }
 
   async mergeClusterTransactions(toCluster: number, ...fromClusters: number[]) {
-    return this.db.batch(await this.mergeClusterTransactionsOps(toCluster, ...fromClusters));
+    return this.db.batchBinary(await this.mergeClusterTransactionsOps(toCluster, ...fromClusters));
   }
 
   async saveClusterBalanceChanges(txid: string, height: number, n: number, clusterIdToDelta: Map<string, number>) {
+    //console.log("saveClusterBalanceChanges", clusterIdToDelta);
     let promises:Promise<ClusterBalance>[] = [];
     let clusterIds = [];
     let deltas = [];
@@ -244,29 +365,39 @@ export class ClusterBalanceService {
       deltas.push(delta);
     });
     let oldBalances = await Promise.all(promises);
-    let ops: AbstractBatch[] = [];
+    let ops: AbstractBatch<Buffer, Buffer>[] = [];
     for (let i = 0; i < deltas.length; i++) {
       let clusterId = clusterIds[i];
       let index = oldBalances[i] === undefined ? 0 : oldBalances[i].id+1;
       let oldBalance = oldBalances[i] === undefined ? 0 : oldBalances[i].balance;
       let newBalance = oldBalance+deltas[i];
-      ops.push({
+      //console.log("\t",clusterId, oldBalance, newBalance, index);
+      ops.push(
+        this.clusterBalanceTable.putOperation({clusterId: clusterId, transactionIndex: index}, {txid: txid, balance: newBalance, height: height, n: n})
+      );
+      /*ops.push({
         type:"put",
         key:db_cluster_balance_prefix+clusterId+"/"+integer2LexString(index),
         value:this.cluster_balance_value(txid, newBalance, height, n)
-      });
-      ops.push({
+      });*/
+      ops.push(
+        this.clusterTxBalanceTable.putOperation({clusterId: clusterId, txid:txid}, {transactionIndex: index, balance: newBalance, height: height, n: n})
+      );
+      /*ops.push({
         type:"put",
         key:db_cluster_tx_balance_prefix+clusterId+"/"+txid,
         value:this.cluster_tx_balance_value(index, newBalance, height, n)
-      });
+      });*/
     }
-    ops.push({
+    ops.push(
+      this.lastSavedTxNTable.putOperation(undefined, {n: n})
+    );
+    /*ops.push({
       type: "put",
       key: db_last_saved_tx_n, 
       value: n
-    });
-    return this.db.batch(ops);
+    });*/
+    return this.db.batchBinary(ops);
   }
 
 }

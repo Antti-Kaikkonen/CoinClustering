@@ -1,10 +1,10 @@
 import RpcClient from 'bitcoind-rpc';
 import { expect } from 'chai';
 import EncodingDown from 'encoding-down';
-import LevelUp from 'levelup';
 import 'mocha';
 import rocksdb from 'rocksdb';
 import { BlockWithTransactions } from './app/models/block';
+import { BinaryDB } from './app/services/binary-db';
 import { BlockImportService } from './app/services/block-import-service';
 import { BlockService } from './app/services/block-service';
 import { ClusterAddressService } from './app/services/cluster-address-service';
@@ -31,7 +31,7 @@ describe('Save a blocks with 3 transactions', () => {
         resolve();
       });
     });
-    db = LevelUp(EncodingDown(rocksdb(dbpath)), {errorIfExists: true});
+    db = new BinaryDB(EncodingDown<Buffer, Buffer>(rocksdb(dbpath), {keyEncoding: 'binary', valueEncoding: 'binary'}), {errorIfExists: true});
     clusterAddressService = new ClusterAddressService(db);
     clusterBalanceService = new ClusterBalanceService(db);
     blockService = new BlockService(db, rpc);
@@ -59,7 +59,7 @@ describe('Save a blocks with 3 transactions', () => {
         version: null,
         size: null,
         locktime: null,
-        txid:"tx1",//create balances from coinbase
+        txid:"0000000000000000000000000000000000000000000000000000000000000000",//create balances from coinbase
         vin:[
           {
             "coinbase":"02960a011e062f503253482f",
@@ -126,7 +126,7 @@ describe('Save a blocks with 3 transactions', () => {
         version: null,
         size: null,
         locktime: null,
-        "txid":"tx2",//spend from address1 to address2 and address3
+        "txid":"0000000000000000000000000000000000000000000000000000000000000001",//spend from address1 to address2 and address3
         "vin":[
             {
               "value":2/100000000,
@@ -168,7 +168,7 @@ describe('Save a blocks with 3 transactions', () => {
         version: null,
         size: null,
         locktime: null,
-        "txid":"tx3",//send from address3 and address4 to address 2
+        "txid":"0000000000000000000000000000000000000000000000000000000000000002",//send from address3 and address4 to address 2
         "vin":[
             {
               "value":11/100000000,

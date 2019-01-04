@@ -1,16 +1,13 @@
-import { AbstractBatch } from 'abstract-leveldown';
 import RpcClient from 'bitcoind-rpc';
-import { LevelUp } from 'levelup';
-import { integer2LexString, lexString2Integer } from '../utils/utils';
-import { db_block_hash } from './db-constants';
+import { BinaryDB } from './binary-db';
 
 export class BlockService {
 
-  constructor(private db: LevelUp, private rpc: RpcClient) {
+  constructor(private db: BinaryDB, private rpc: RpcClient) {
 
   }  
 
-  async saveBlockHash(height: number, hash: string) {
+  /*async saveBlockHash(height: number, hash: string) {
     let ops: AbstractBatch[] = [];
     ops.push({
       type:"put",
@@ -18,11 +15,11 @@ export class BlockService {
       value: hash
     });
     return this.db.batch(ops);
-  }
+  }*/
 
-  async getBlockHash(height: number): Promise<string> {
+  /*async getBlockHash(height: number): Promise<string> {
     return this.db.get(db_block_hash+integer2LexString(height));
-  }
+  }*/
 
   async getRpcBlockHash(height: number): Promise<string> {
     return new Promise<string>((resolve, reject) => {
@@ -32,7 +29,7 @@ export class BlockService {
     });
   }
 
-  async getTipInfo(): Promise<TipInfo> {
+  /*async getTipInfo(): Promise<TipInfo> {
     let lastSavedBlock = await this.getLastBlock();
     if (lastSavedBlock === undefined) return undefined;
     let height = lastSavedBlock.height;
@@ -44,9 +41,9 @@ export class BlockService {
       rpcHash = await this.getRpcBlockHash(height);
     }
     return {lastSavedHeight: lastSavedBlock.height, lastSavedHash: lastSavedBlock.hash, reorgDepth: lastSavedBlock.height-height, commonAncestorHash: savedBlockHash};
-  }
+  }*/
 
-  async getLastBlock(): Promise<{height: number, hash: string}> {
+  /*async getLastBlock(): Promise<{height: number, hash: string}> {
     return new Promise<{height: number, hash: string}>((resolve, reject) => {
       this.db.createReadStream({
         gte:db_block_hash+integer2LexString(0),
@@ -68,7 +65,7 @@ export class BlockService {
       .on('end', function () {
       });
     });
-  }
+  }*/
 
 }  
 

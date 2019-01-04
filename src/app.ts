@@ -1,13 +1,13 @@
 import RpcClient from 'bitcoind-rpc';
-import encoding from 'encoding-down';
+import EncodingDown from 'encoding-down';
 import express from 'express';
-import levelup from 'levelup';
 import LRU, { Cache } from 'lru-cache';
 import RocksDB from 'rocksdb';
 import { Readable, Transform, Writable } from 'stream';
 import { ClusterController } from './app/controllers/cluster-controller';
 import { Block, BlockWithTransactions } from './app/models/block';
 import { Transaction } from './app/models/transaction';
+import { BinaryDB } from './app/services/binary-db';
 import { BlockImportService } from './app/services/block-import-service';
 import { BlockService } from './app/services/block-service';
 import { ClusterAddressService } from './app/services/cluster-address-service';
@@ -17,16 +17,25 @@ import { ClusterBalanceService } from './app/services/cluster-balance-service';
 
 //export NODE_OPTIONS="--max_old_space_size=4096 or 8192
 
-
 let outputCache: Cache<string, {value: number, addresses: string[]}> = new LRU({max: 3000000});
 
 let cwd = process.cwd();
 let args = process.argv.slice(2);
 const config: any = require(cwd+'/config');
 
+/*RocksDB['repair'](cwd+'/db', (err) => {
+  console.log("err",err);
+  process.exit();
+});
+console.log("repaired");*/
+
+
+
 var rpc = new RpcClient(config);
 let rocksdb = RocksDB(cwd+'/db');
-let db = levelup(encoding(rocksdb), {
+
+
+let db = new BinaryDB(EncodingDown<Buffer, Buffer>(rocksdb, {keyEncoding: 'binary', valueEncoding: 'binary'}), {
   writeBufferSize: 8 * 1024 * 1024,
   cacheSize: 256 * 1024 * 1024
 });

@@ -37,7 +37,7 @@ let leveldown = LevelDOWN(cwd+'/db');
 let db = new BinaryDB(EncodingDown<Buffer, Buffer>(leveldown, {keyEncoding: 'binary', valueEncoding: 'binary'}), {
   writeBufferSize: 8 * 1024 * 1024,
   cacheSize: 256 * 1024 * 1024,
-  compression: false
+  compression: true
 });
 
 let clusterBalanceService = new ClusterBalanceService(db);

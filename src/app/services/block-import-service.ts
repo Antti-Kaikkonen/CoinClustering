@@ -8,6 +8,7 @@ import { LastMergedHeightTable } from "../tables/last-merged-height-table";
 import { LastSavedTxHeightTable } from "../tables/last-saved-tx-height-table";
 import { LastSavedTxNTable } from "../tables/last-saved-tx-n-table";
 import { NextClusterIdTable } from "../tables/next-cluster-id-table";
+import { JSONtoAmount } from "../utils/utils";
 import { BinaryDB } from "./binary-db";
 import { BlockService } from "./block-service";
 import { ClusterAddressService } from "./cluster-address-service";
@@ -45,13 +46,13 @@ export class BlockImportService {
     .forEach(vin => {
       let oldBalance = addressToDelta.get(vin.address);
       if (!oldBalance) oldBalance = 0;
-      addressToDelta.set(vin.address, oldBalance-vin.value*100000000);
+      addressToDelta.set(vin.address, oldBalance-JSONtoAmount(vin.value));
     }); 
     tx.vout.filter(vout => vout.scriptPubKey.addresses && vout.scriptPubKey.addresses.length === 1)
     .forEach(vout => {
       let oldBalance = addressToDelta.get(vout.scriptPubKey.addresses[0]);
       if (!oldBalance) oldBalance = 0;
-      addressToDelta.set(vout.scriptPubKey.addresses[0], oldBalance+vout.value*100000000);
+      addressToDelta.set(vout.scriptPubKey.addresses[0], oldBalance+JSONtoAmount(vout.value));
     });
     return addressToDelta;
   }

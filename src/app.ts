@@ -23,6 +23,17 @@ let outputCache: Cache<string, {value: number, addresses: string[]}> = new LRU({
 
 let cwd = process.cwd();
 let args = process.argv.slice(2);
+args.forEach(arg => {
+  let components = arg.split("=");
+  if (components.length !== 2) return;
+  let name = components[0];
+  let value = components[1];
+  if (name === "outputcache") {
+    let cacheSize: number = Number(value);
+    console.log("outputcache", value, "(", cacheSize, ")");
+    outputCache = new LRU({max: cacheSize});
+  }
+});
 const config: any = require(cwd+'/config');
 
 /*RocksDB['repair'](cwd+'/db', (err) => {

@@ -28,3 +28,5 @@ export const db_last_saved_tx_height = "m";//prefix => height
 export const db_last_saved_tx_n = "n";//prefix => n
 
 export const db_cluster_merged_to = "o";//prefix/clusterId => clusterId (follow these links to discover current cluster from an old clusterId)
+
+export const db_balace_to_cluster_prefix = "p";//

@@ -1,5 +1,6 @@
 import { AbstractBatch } from 'abstract-leveldown';
 import { ClusterBalance } from '../models/cluster-balance';
+import { BalanceToClusterTable } from '../tables/balance-to-cluster-table';
 import { ClusterBalanceCountTable } from '../tables/cluster-balance-count-table';
 import { ClusterBalanceTable } from '../tables/cluster-balance-table';
 import { ClusterTxBalanceTable } from '../tables/cluster-tx-balance-table';
@@ -13,12 +14,14 @@ export class ClusterBalanceService {
   clusterTxBalanceTable: ClusterTxBalanceTable;
   clusterBalanceCountTable: ClusterBalanceCountTable;
   lastSavedTxNTable: LastSavedTxNTable;
+  balanceToClusterTable: BalanceToClusterTable;
 
   constructor(private db: BinaryDB) {
     this.clusterBalanceTable = new ClusterBalanceTable(db);
     this.clusterTxBalanceTable = new ClusterTxBalanceTable(db);
     this.clusterBalanceCountTable = new ClusterBalanceCountTable(db);
     this.lastSavedTxNTable = new LastSavedTxNTable(db);
+    this.balanceToClusterTable = new BalanceToClusterTable(db);
   }  
 
   async getLast(clusterId: number): Promise<ClusterBalance> {
@@ -253,12 +256,13 @@ export class ClusterBalanceService {
     
     let merged = [];
     fromClusters.forEach((fromCluster: number, index: number) => {
-      let transactionsFrom = values[index].map((value: ClusterBalance, index: number, arr: ClusterBalance[]) => { 
+      let clusterTransactions: ClusterBalance[] = values[index];
+      let clusterTransactionsWithDelta = clusterTransactions.map((value: ClusterBalance, index: number, arr: ClusterBalance[]) => { 
         let delta = index === 0 ? value.balance : value.balance-arr[index-1].balance;
         return {id: value.id, txid: value.txid, delta: delta, height: value.height, n: value.n};
       });
 
-      transactionsFrom.forEach((tx: any, index: number) => {
+      clusterTransactionsWithDelta.forEach((tx: any, index: number) => {
         merged.push(tx);
         ops.push(
           this.clusterBalanceTable.delOperation({clusterId: fromCluster, transactionIndex: tx.id})
@@ -278,6 +282,10 @@ export class ClusterBalanceService {
       ops.push(
         this.clusterBalanceCountTable.delOperation({clusterId: fromCluster})
       );
+      if (clusterTransactions.length > 0) {
+        let balanceToDelete = clusterTransactions[clusterTransactions.length-1].balance;
+        ops.push(this.balanceToClusterTable.delOperation({balance: balanceToDelete, clusterId:fromCluster}));
+      }
       /*let buf = Buffer.allocUnsafe(4);
       buf.writeUInt32BE(fromCluster, 0);
       ops.push({
@@ -342,6 +350,14 @@ export class ClusterBalanceService {
     ops.push(
       this.clusterBalanceCountTable.putOperation({clusterId: toCluster}, {balanceCount: merged.length+skipped})
     );
+
+    if (balances.length > 0) {
+      let newBalance = balances[balances.length-1];
+      if (oldBalance !== newBalance) {
+        ops.push(this.balanceToClusterTable.delOperation({balance: oldBalance, clusterId: toCluster}));
+        ops.push(this.balanceToClusterTable.putOperation({balance: newBalance, clusterId: toCluster}, {}));
+      }
+    }
     /*ops.push({
       type:"put",
       key:db_cluster_balance_count_prefix+toCluster,
@@ -371,6 +387,8 @@ export class ClusterBalanceService {
       let index = oldBalances[i] === undefined ? 0 : oldBalances[i].id+1;
       let oldBalance = oldBalances[i] === undefined ? 0 : oldBalances[i].balance;
       let newBalance = oldBalance+deltas[i];
+
+      ops.push(this.clusterBalanceCountTable.putOperation({clusterId: clusterId}, {balanceCount: index+1}));
       //console.log("\t",clusterId, oldBalance, newBalance, index);
       ops.push(
         this.clusterBalanceTable.putOperation({clusterId: clusterId, transactionIndex: index}, {txid: txid, balance: newBalance, height: height, n: n})
@@ -388,6 +406,10 @@ export class ClusterBalanceService {
         key:db_cluster_tx_balance_prefix+clusterId+"/"+txid,
         value:this.cluster_tx_balance_value(index, newBalance, height, n)
       });*/
+
+      ops.push(this.balanceToClusterTable.putOperation({balance: newBalance, clusterId:clusterId}, {}));
+      if (index > 0 && oldBalance !== newBalance) 
+        ops.push(this.balanceToClusterTable.delOperation({balance: oldBalance, clusterId:clusterId}));
     }
     ops.push(
       this.lastSavedTxNTable.putOperation(undefined, {n: n})

@@ -64,11 +64,11 @@ export abstract class PrefixTable<K, V> implements Table<K, V> {
   }
 
   async put(key: K, value: V): Promise<void> {
-    await this.db.put(this.keyAsBuffer(key), this.valueencoding.encode(value)); 
+    return this.db.put(this.keyAsBuffer(key), this.valueencoding.encode(value)); 
   }
 
   async del(key: K,): Promise<void> {
-    await this.db.del(this.keyAsBuffer(key)); 
+    return this.db.del(this.keyAsBuffer(key)); 
   }
 
   createReadStream(options?: AbstractIteratorOptions<K>): NodeJS.ReadableStream {

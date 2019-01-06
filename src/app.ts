@@ -15,7 +15,9 @@ import { ClusterBalanceService } from './app/services/cluster-balance-service';
 
 
 
-//export NODE_OPTIONS="--max_old_space_size=4096 or 8192
+//export NODE_OPTIONS="--max_old_space_size=8192"
+
+//export NODE_OPTIONS="--max_old_space_size=16384"
 
 let outputCache: Cache<string, {value: number, addresses: string[]}> = new LRU({max: 3000000});
 

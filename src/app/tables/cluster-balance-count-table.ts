@@ -8,7 +8,7 @@ export class ClusterBalanceCountTable extends PrefixTable< { clusterId: number},
 
   keyencoding = {
     encode: (key: { clusterId: number}): Buffer => {
-        return Buffer.from(lexi.encode(key.clusterId));
+        return lexi.encode(key.clusterId);
     },
     decode: (buf: Buffer): { clusterId: number, addressIndex?: number} => {
       let clusterId = lexi.decode(buf, 0).value;

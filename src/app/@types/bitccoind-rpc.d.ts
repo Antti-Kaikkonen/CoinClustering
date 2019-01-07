@@ -20,9 +20,9 @@ declare module 'bitcoind-rpc' {
 
     getBlock(hash: string, cb?: (err, res: RpcResult<any>)=>void): void;
     
-    decodeRawTransaction(txid, cb?: (err, res: RpcResult<any>)=>void): void;
+    decodeRawTransaction(txid: string, cb?: (err, res: RpcResult<any>)=>void): void;
 
-    getRawTransaction(txid, cb?: (err, res: RpcResult<any>)=>void): void;
+    getRawTransaction(txid: string, verbose?: number, cb?: (err, res: RpcResult<any>)=>void): void;
 
     batch(batchcall, fn: (err, res: RpcResult<any>[])=>void): void;
 

@@ -145,6 +145,40 @@ async function getRawTransactions(txids: string[]): Promise<string[]> {
   return res;
 }
 
+
+async function getTransactionsHelper(txids: string[]): Promise<Transaction[]> {
+  let batchCall = () => {
+    txids.forEach(txid => rpc.getRawTransaction(txid, 1));
+  }
+  return new Promise<Transaction[]>((resolve, reject) => {
+    rpc.batch(batchCall, (err, rawtxs) => {
+      if (err) reject(err)
+      else if (rawtxs.length > 0 && rawtxs[0].error) reject(rawtxs[0].error.message)
+      else resolve(rawtxs.map(rawtx => rawtx.result));
+    });
+  });  
+}
+
+async function getTransactions(txids: string[]): Promise<Transaction[]> {
+  let res: Transaction[] = [];
+  let from = 0;
+  let promises = [];
+  while (from < txids.length) {
+    promises.push(getTransactionsHelper(txids.slice(from, from+rpc_batch_size)));//To avoid HTTP 413 error
+
+    if (promises.length > 500) {
+      let batches = await Promise.all(promises);
+      batches.forEach(txs => txs.forEach(tx =>res.push(tx)));
+      promises = [];
+    }
+    from+=rpc_batch_size;
+  }
+  let batches = await Promise.all(promises);
+  batches.forEach(rawtxs => rawtxs.forEach(rawtx =>res.push(rawtx)));
+  return res;
+}
+
+
 //let utxoCache: Map<string, {value: number, addresses: string[]}> = new Map();
 
 class attachTransactons extends Transform {
@@ -153,8 +187,9 @@ class attachTransactons extends Transform {
       objectMode: true,
       //highWaterMark: 256,
       transform: async (block: Block, encoding, callback) => {
-        let rawtxs = await getRawTransactions(block.tx);
-        let txs: Transaction[] = await decodeRawTransactions(rawtxs);
+        //let rawtxs = await getRawTransactions(block.tx);
+        //let txs: Transaction[] = await decodeRawTransactions(rawtxs);
+        let txs: Transaction[] = await getTransactions(block.tx);
         txs.forEach(tx => {
           tx.vout.forEach(vout => {
             outputCache.set(tx.txid+";"+vout.n, {value:vout.value, addresses: vout.scriptPubKey.addresses});
@@ -209,7 +244,8 @@ class attachInputs extends Transform {
         });
         if (input_txids.length > 0) {
           console.log("attaching inputs...", input_txids.length);
-          let txs2 = await decodeRawTransactions(await getRawTransactions(input_txids));
+          //let txs2 = await decodeRawTransactions(await getRawTransactions(input_txids));
+          let txs2 = await getTransactions(input_txids);
           block.tx.forEach(tx => {
             tx.vin.forEach(vin => {
               if (vin.coinbase) return;

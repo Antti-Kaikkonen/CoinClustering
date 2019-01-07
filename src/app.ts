@@ -36,12 +36,6 @@ args.forEach(arg => {
 });
 const config: any = require(cwd+'/config');
 
-/*RocksDB['repair'](cwd+'/db', (err) => {
-  console.log("err",err);
-  process.exit();
-});
-console.log("repaired");*/
-
 
 var rpc = new RpcClient(config);
 let leveldown = LevelDOWN(cwd+'/db');

@@ -297,25 +297,27 @@ export class ClusterBalanceService {
     if (merged.length === 0) return ops;
     let transactionsTo = await this.getClusterTransactionsAfter(toCluster, merged[0].height, merged[0].n);//[0] = oldest.
 
+    let lastBalanceBeforeMerge: number;
     let oldBalance: number;
     let skipped: number;
     if (transactionsTo.length === 0) {
       let asd = await this.getLast(toCluster);
-      oldBalance = asd.balance;
+      lastBalanceBeforeMerge = oldBalance = asd.balance;
       skipped = asd.id+1;
     } else {
+      oldBalance = transactionsTo[0].balance;
       if (transactionsTo[0].id === 0) {
-        oldBalance = 0;
+        lastBalanceBeforeMerge = 0;
         skipped = 0;
       } else {
         let asd = await this.getClusterTransaction(toCluster, transactionsTo[0].id-1);
-        oldBalance = asd.balance;
+        lastBalanceBeforeMerge = asd.balance;
         skipped = asd.id+1;
       }
     }
 
     let transactionsToWithDelta = transactionsTo.map((value, index, arr) => { 
-      let delta = index === 0 ? value.balance-oldBalance : value.balance-arr[index-1].balance;
+      let delta = index === 0 ? value.balance-lastBalanceBeforeMerge : value.balance-arr[index-1].balance;
       return {id: value.id, txid: value.txid, delta: delta, height: value.height, n: value.n};
     });
 
@@ -323,7 +325,7 @@ export class ClusterBalanceService {
     this.sortAndRemoveDuplicates(merged);
 
     let balances = [];
-    balances[0] = oldBalance+merged[0].delta;
+    balances[0] = lastBalanceBeforeMerge+merged[0].delta;
     for (let i = 1; i < merged.length; i++) {
       balances[i] = balances[i-1]+merged[i].delta;
     }
@@ -353,7 +355,7 @@ export class ClusterBalanceService {
 
     if (balances.length > 0) {
       let newBalance = balances[balances.length-1];
-      if (oldBalance !== newBalance) {
+      if (lastBalanceBeforeMerge !== newBalance) {
         ops.push(this.balanceToClusterTable.delOperation({balance: oldBalance, clusterId: toCluster}));
         ops.push(this.balanceToClusterTable.putOperation({balance: newBalance, clusterId: toCluster}, {}));
       }
@@ -408,8 +410,9 @@ export class ClusterBalanceService {
       });*/
 
       ops.push(this.balanceToClusterTable.putOperation({balance: newBalance, clusterId:clusterId}, {}));
-      if (index > 0 && oldBalance !== newBalance) 
+      if (index > 0 && oldBalance !== newBalance) {
         ops.push(this.balanceToClusterTable.delOperation({balance: oldBalance, clusterId:clusterId}));
+      }
     }
     ops.push(
       this.lastSavedTxNTable.putOperation(undefined, {n: n})

@@ -52,7 +52,7 @@ export class ClusterController {
         clusterId: data.key.clusterId,
         balance: data.key.balance
       });
-    }).on('end', () => {
+    }).on('finish', () => {
       res.send(result);
     });
   }

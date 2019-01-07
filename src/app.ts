@@ -59,7 +59,7 @@ let clusterAddressService = new ClusterAddressService(db);
 
 let blockService = new BlockService(db, rpc);
 
-let clusterController = new ClusterController(clusterBalanceService, clusterAddressService);
+let clusterController = new ClusterController(db);
 
 let blockImportService = new BlockImportService(db, clusterAddressService, clusterBalanceService, blockService);
 
@@ -67,6 +67,7 @@ const app = express();
 app.get("/hello", clusterController.clusterCurrentBalances);
 app.get("/hello2", clusterController.clusterTransactions);
 app.get('/cluster_addresses/:id', clusterController.clusterAddresses);
+app.get('/largest_clusters', clusterController.clustersByBalance);
 app.listen(config.listen_port);
 
 async function getBlockByHash(hash: string) {

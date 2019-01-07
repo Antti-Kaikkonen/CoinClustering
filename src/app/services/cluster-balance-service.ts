@@ -370,14 +370,14 @@ export class ClusterBalanceService {
     return this.db.batchBinary(await this.mergeClusterTransactionsOps(toCluster, ...fromClusters));
   }
 
-  async saveClusterBalanceChanges(txid: string, height: number, n: number, clusterIdToDelta: Map<string, number>) {
+  async saveClusterBalanceChanges(txid: string, height: number, n: number, clusterIdToDelta: Map<number, number>) {
     //console.log("saveClusterBalanceChanges", clusterIdToDelta);
     let promises:Promise<ClusterBalance>[] = [];
-    let clusterIds = [];
+    let clusterIds: number[] = [];
     let deltas = [];
-    clusterIdToDelta.forEach((delta: number, clusterId: string) => {
+    clusterIdToDelta.forEach((delta: number, clusterId: number) => {
       clusterIds.push(clusterId);
-      promises.push(this.getLast(Number(clusterId)));
+      promises.push(this.getLast(clusterId));
       deltas.push(delta);
     });
     let oldBalances = await Promise.all(promises);

@@ -1,11 +1,20 @@
 import { Request, Response } from 'express';
+import { BinaryDB } from '../services/binary-db';
 import { ClusterAddressService } from '../services/cluster-address-service';
 import { ClusterBalanceService } from '../services/cluster-balance-service';
+import { BalanceToClusterTable } from '../tables/balance-to-cluster-table';
 
 
 export class ClusterController {
 
-  constructor(private clusterBalanceService: ClusterBalanceService, private clusterAddressService: ClusterAddressService) {
+  private clusterBalanceService: ClusterBalanceService;
+  private clusterAddressService: ClusterAddressService;
+  private balanceToClusterTable: BalanceToClusterTable;
+
+  constructor(private db: BinaryDB) {
+    this.clusterBalanceService = new ClusterBalanceService(db);
+    this.clusterAddressService = new ClusterAddressService(db);
+    this.balanceToClusterTable = new BalanceToClusterTable(db);
   }  
 
   clusterCurrentBalances = async (req: Request, res: Response) => {
@@ -35,5 +44,17 @@ export class ClusterController {
     let result = await this.clusterAddressService.getClusterAddresses(clusterId);
     res.send(result);
   };
+
+  clustersByBalance = async (req:Request, res:Response) => {
+    let result = [];
+    this.balanceToClusterTable.createReadStream({reverse: true, limit: 1000}).on('data', (data) => {
+      result.push({
+        clusterId: data.key.clusterId,
+        balance: data.key.balance
+      });
+    }).on('end', () => {
+      res.send(result);
+    });
+  }
 
 }  

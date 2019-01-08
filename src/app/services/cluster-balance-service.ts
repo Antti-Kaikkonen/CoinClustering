@@ -296,7 +296,7 @@ export class ClusterBalanceService {
     this.sortAndRemoveDuplicates(merged);
     if (merged.length === 0) return ops;
     let transactionsTo = await this.getClusterTransactionsAfter(toCluster, merged[0].height, merged[0].n);//[0] = oldest.
-
+    //transactionsTo[0].height <= transactionsTo[1].height
     let lastBalanceBeforeMerge: number;
     let oldBalance: number;
     let skipped: number;
@@ -305,7 +305,7 @@ export class ClusterBalanceService {
       lastBalanceBeforeMerge = oldBalance = asd.balance;
       skipped = asd.id+1;
     } else {
-      oldBalance = transactionsTo[0].balance;
+      oldBalance = transactionsTo[transactionsTo.length-1].balance;
       if (transactionsTo[0].id === 0) {
         lastBalanceBeforeMerge = 0;
         skipped = 0;

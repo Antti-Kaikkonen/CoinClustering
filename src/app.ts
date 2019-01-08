@@ -199,7 +199,7 @@ async function restblock(hash: string): Promise<BlockWithTransactions> {
 
 //let utxoCache: Map<string, {value: number, addresses: string[]}> = new Map();
 
-class attachTransactons extends Transform {
+class AttachTransactons extends Transform {
   constructor() {
     super({
       objectMode: true,
@@ -223,14 +223,14 @@ class attachTransactons extends Transform {
 let cacheHits: number = 0;
 let cacheMisses: number = 0;
 
-class attachInputs extends Transform {
+class AttachInputs extends Transform {
   
   constructor() {
     super({
       objectMode: true,
       //highWaterMark: 256,
       transform: async (block: BlockWithTransactions, encoding, callback) => {
-        let input_txids = [];
+        let input_txids: Set<string> = new Set();
         block.tx.forEach((tx, n) => {
           tx.vin.forEach(vin => {
             if (vin.coinbase) return;
@@ -242,40 +242,35 @@ class attachInputs extends Transform {
                 outputCache.del(vin.txid+";"+vin.vout);
               } else {
                 cacheMisses++;
-                let foundTx = block.tx.slice(0, n).find(tx => tx.txid === vin.txid);
-                if (foundTx !== undefined) {
-                  utxo = {
-                    addresses: foundTx.vout[vin.vout].scriptPubKey.addresses,
-                    value: foundTx.vout[vin.vout].value
-                  };
-                }  
               }
               if (utxo !== undefined) {
                 vin.value = utxo.value;
                 if (utxo.addresses && utxo.addresses.length === 1) vin.address = utxo.addresses[0];
               } else {
-                if (input_txids.indexOf(vin.txid) >= 0) return;
-                input_txids.push(vin.txid);
+                if (input_txids.has(vin.txid)) return;
+                input_txids.add(vin.txid);
               }
             }
           });
         });
-        if (input_txids.length > 0) {
-          console.log("attaching inputs...", input_txids.length);
+        if (input_txids.size > 0) {
+          console.log("attaching inputs...", input_txids.size);
           //let txs2 = await decodeRawTransactions(await getRawTransactions(input_txids));
-          let txs2 = await getTransactions(input_txids);
+          let inputTxs = await getTransactions(Array.from(input_txids));
+          let txidToInputTx: Map<string, Transaction> = new Map();
+          inputTxs.forEach(tx => txidToInputTx.set(tx.txid, tx));
           block.tx.forEach(tx => {
             tx.vin.forEach(vin => {
               if (vin.coinbase) return;
               if (vin.value === undefined) {
-                let index = input_txids.indexOf(vin.txid);
-                vin.value = txs2[index].vout[vin.vout].value;
-                let pubkey = txs2[index].vout[vin.vout].scriptPubKey;
+                let inputTx = txidToInputTx.get(vin.txid);
+                vin.value = inputTx.vout[vin.vout].value;
+                let pubkey = inputTx.vout[vin.vout].scriptPubKey;
                 if (pubkey.addresses && pubkey.addresses.length === 1) 
                   vin.address = pubkey.addresses[0];
               }  
             });
-          });      
+          });
         }
         this.push(block);
         callback();
@@ -392,7 +387,7 @@ async function doProcessing() {
   let startHash: string = await blockService.getRpcBlockHash(startHeight);
   let blockReader = new RestBlockReader(startHash, toHeight);
   //let txAttacher = new attachTransactons();
-  let inputAttacher = new attachInputs();
+  let inputAttacher = new AttachInputs();
   blockReader.pipe(inputAttacher).pipe(blockWriter);
   blockReader.on('end', () => {
   });

@@ -1,6 +1,7 @@
 import RpcClient from 'bitcoind-rpc';
 import EncodingDown from 'encoding-down';
 import express from 'express';
+import http from 'http';
 import LevelDOWN from 'leveldown';
 import LRU, { Cache } from 'lru-cache';
 import { Readable, Transform, Writable } from 'stream';
@@ -178,6 +179,23 @@ async function getTransactions(txids: string[]): Promise<Transaction[]> {
   return res;
 }
 
+async function restblock(hash: string): Promise<BlockWithTransactions> {
+  return new Promise<BlockWithTransactions>((resolve, reject) => {
+    //console.log("http://"+config.host+":"+config.port+"/rest/block/"+hash+".json");
+    http.get("http://"+config.host+":"+config.port+"/rest/block/"+hash+".json", (resp: http.IncomingMessage) => {
+
+      let data = '';
+      resp.on('data', (chunk) => {
+        data += chunk;
+      });
+  
+      resp.on('end', () => {
+        resolve(JSON.parse(data));
+      });
+    });
+  });
+}
+
 
 //let utxoCache: Map<string, {value: number, addresses: string[]}> = new Map();
 
@@ -267,6 +285,35 @@ class attachInputs extends Transform {
 }
 
 
+class RestBlockReader extends Readable {
+  currentHash: string;
+  currentHeight: number;
+  constructor(hash: string, stopHeight: number) {
+    super({
+      objectMode: true,
+      //highWaterMark: 256,
+      read: async (size) => {
+        if (this.currentHeight !== undefined && this.currentHeight > stopHeight) 
+          this.push(null);
+        else while (true) {
+          let block: BlockWithTransactions = await restblock(this.currentHash);
+          block.tx.forEach(tx => {
+            tx.vout.forEach(vout => {
+              outputCache.set(tx.txid+";"+vout.n, {value:vout.value, addresses: vout.scriptPubKey.addresses});
+            });
+          });
+          this.currentHash = block.nextblockhash;
+          this.currentHeight = block.height+1;
+          let shouldBreak = this.push(block);
+          break;//if (shouldBreak) break;//async push fixed in node 10 https://github.com/nodejs/node/pull/17979
+        }
+        
+      }
+    });
+    this.currentHash = hash;
+  }
+};  
+
 class BlockReader extends Readable {
   currentHash: string;
   currentHeight: number;
@@ -343,10 +390,10 @@ async function doProcessing() {
   }
   if (startHeight === 0) outputCache.reset();
   let startHash: string = await blockService.getRpcBlockHash(startHeight);
-  let blockReader = new BlockReader(startHash, toHeight);
-  let txAttacher = new attachTransactons();
+  let blockReader = new RestBlockReader(startHash, toHeight);
+  //let txAttacher = new attachTransactons();
   let inputAttacher = new attachInputs();
-  blockReader.pipe(txAttacher).pipe(inputAttacher).pipe(blockWriter);
+  blockReader.pipe(inputAttacher).pipe(blockWriter);
   blockReader.on('end', () => {
   });
   blockWriter.on('finish', () => {
@@ -354,7 +401,7 @@ async function doProcessing() {
   });
   setInterval(()=>{
     console.log("blockReader",blockReader.readableLength);
-    console.log("txAttacher", txAttacher.readableLength, txAttacher.writableLength);
+    //console.log("txAttacher", txAttacher.readableLength, txAttacher.writableLength);
     console.log("inputAttacher", inputAttacher.readableLength, inputAttacher.writableLength);
     console.log("blockWriter", blockWriter.writableLength);
     console.log("cacheHit rate: "+ cacheHits/(cacheHits+cacheMisses) );

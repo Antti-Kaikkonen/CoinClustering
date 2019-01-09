@@ -94,7 +94,7 @@ async function decodeRawTransactionsHelper(rawtxs: any[]): Promise<Transaction[]
 
 //Each batch is executed concurrently in bitcoin core so making this value too large can lower performance. Too low value will increase overhead and exchaust rpcworkqueue
 //Recommended to set rpcworkqueue=1024 and rpcthreads=64 in bitcoin.conf.
-let rpc_batch_size = 10;
+let rpc_batch_size = 30;
 
 async function decodeRawTransactions(rawtxs: any[]): Promise<Transaction[]> {
   let res = [];
@@ -167,7 +167,7 @@ async function getTransactions(txids: string[]): Promise<Transaction[]> {
   while (from < txids.length) {
     promises.push(getTransactionsHelper(txids.slice(from, from+rpc_batch_size)));//To avoid HTTP 413 error
 
-    if (promises.length > 500) {
+    if (promises.length > 100) {
       let batches = await Promise.all(promises);
       batches.forEach(txs => txs.forEach(tx =>res.push(tx)));
       promises = [];
@@ -223,13 +223,13 @@ class AttachTransactons extends Transform {
 let cacheHits: number = 0;
 let cacheMisses: number = 0;
 
-class AttachInputs extends Transform {
+class InputFetcher extends Transform {
   
   constructor() {
     super({
       objectMode: true,
-      //highWaterMark: 256,
-      transform: async (block: BlockWithTransactions, encoding, callback) => {
+      highWaterMark: 2,
+      transform: (block: BlockWithTransactions, encoding, callback) => {
         let input_txids: Set<string> = new Set();
         block.tx.forEach((tx, n) => {
           tx.vin.forEach(vin => {
@@ -253,12 +253,39 @@ class AttachInputs extends Transform {
             }
           });
         });
+        let result: {
+            block: BlockWithTransactions, 
+            inputTxsPromise?: Promise<Transaction[]>
+          } = {
+            block: block
+          }
         if (input_txids.size > 0) {
           console.log("attaching inputs...", input_txids.size);
-          //let txs2 = await decodeRawTransactions(await getRawTransactions(input_txids));
-          let inputTxs = await getTransactions(Array.from(input_txids));
+          result.inputTxsPromise = getTransactions(Array.from(input_txids));
+        }
+        this.push(result);
+        callback();
+      }
+    });
+  }
+}
+
+class InputAttacher extends Transform {
+  
+  constructor() {
+    super({
+      objectMode: true,
+      highWaterMark: 2,
+      transform: async (blockAndInputs: {block: BlockWithTransactions, inputTxsPromise?: Promise<Transaction[]>} , encoding, callback) => {
+        let block = blockAndInputs.block;
+        
+        let inputTxsPromise = blockAndInputs.inputTxsPromise;
+        if (inputTxsPromise !== undefined) {
+          let inputTxs: Transaction[] = await inputTxsPromise;
+          console.log("inputAttacher. got ", inputTxs.length, "inputs");
           let txidToInputTx: Map<string, Transaction> = new Map();
           inputTxs.forEach(tx => txidToInputTx.set(tx.txid, tx));
+
           block.tx.forEach(tx => {
             tx.vin.forEach(vin => {
               if (vin.coinbase) return;
@@ -286,7 +313,7 @@ class RestBlockReader extends Readable {
   constructor(hash: string, stopHeight: number) {
     super({
       objectMode: true,
-      //highWaterMark: 256,
+      highWaterMark: 16,
       read: async (size) => {
         if (this.currentHeight !== undefined && this.currentHeight > stopHeight) 
           this.push(null);
@@ -387,8 +414,9 @@ async function doProcessing() {
   let startHash: string = await blockService.getRpcBlockHash(startHeight);
   let blockReader = new RestBlockReader(startHash, toHeight);
   //let txAttacher = new attachTransactons();
-  let inputAttacher = new AttachInputs();
-  blockReader.pipe(inputAttacher).pipe(blockWriter);
+  let inputFetcher = new InputFetcher();
+  let inputAttacher = new InputAttacher();
+  blockReader.pipe(inputFetcher).pipe(inputAttacher).pipe(blockWriter);
   blockReader.on('end', () => {
   });
   blockWriter.on('finish', () => {
@@ -397,6 +425,7 @@ async function doProcessing() {
   setInterval(()=>{
     console.log("blockReader",blockReader.readableLength);
     //console.log("txAttacher", txAttacher.readableLength, txAttacher.writableLength);
+    console.log("inputFetcher", inputFetcher.readableLength, inputFetcher.writableLength);
     console.log("inputAttacher", inputAttacher.readableLength, inputAttacher.writableLength);
     console.log("blockWriter", blockWriter.writableLength);
     console.log("cacheHit rate: "+ cacheHits/(cacheHits+cacheMisses) );

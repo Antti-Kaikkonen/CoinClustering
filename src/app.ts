@@ -419,13 +419,8 @@ async function doProcessing() {
   //let txAttacher = new attachTransactons();
   let inputFetcher = new InputFetcher();
   let inputAttacher = new InputAttacher();
-  blockReader.pipe(inputFetcher).pipe(inputAttacher).pipe(blockWriter);
-  blockReader.on('end', () => {
-  });
-  blockWriter.on('finish', () => {
-    setTimeout(doProcessing, 0);
-  });
-  setInterval(()=>{
+
+  let interval = setInterval(()=>{
     console.log("blockReader",blockReader.readableLength);
     //console.log("txAttacher", txAttacher.readableLength, txAttacher.writableLength);
     console.log("inputFetcher", inputFetcher.readableLength, inputFetcher.writableLength);
@@ -434,4 +429,12 @@ async function doProcessing() {
     console.log("cacheHit rate: "+ cacheHits/(cacheHits+cacheMisses) );
     if (outputCache) console.log("utxocache length", outputCache.size);
   }, 5000);
+
+  blockReader.pipe(inputFetcher).pipe(inputAttacher).pipe(blockWriter);
+  blockReader.on('end', () => {
+  });
+  blockWriter.on('finish', () => {
+    clearInterval(interval);
+    setTimeout(doProcessing, 0);
+  });
 }

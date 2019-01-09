@@ -3,7 +3,6 @@ import EncodingDown from 'encoding-down';
 import express from 'express';
 import http from 'http';
 import LevelDOWN from 'leveldown';
-import LRU, { Cache } from 'lru-cache';
 import { Readable, Transform, Writable } from 'stream';
 import { ClusterController } from './app/controllers/cluster-controller';
 import { Block, BlockWithTransactions } from './app/models/block';
@@ -13,6 +12,8 @@ import { BlockImportService } from './app/services/block-import-service';
 import { BlockService } from './app/services/block-service';
 import { ClusterAddressService } from './app/services/cluster-address-service';
 import { ClusterBalanceService } from './app/services/cluster-balance-service';
+import { OutputCache } from './app/services/output-cache';
+import { JSONtoAmount } from './app/utils/utils';
 
 
 
@@ -20,7 +21,8 @@ import { ClusterBalanceService } from './app/services/cluster-balance-service';
 
 //export NODE_OPTIONS="--max_old_space_size=16384"
 
-let outputCache: Cache<string, {value: number, addresses: string[]}> = new LRU({max: 3000000});
+let outputCache: OutputCache;
+
 
 let cwd = process.cwd();
 let args = process.argv.slice(2);
@@ -32,7 +34,7 @@ args.forEach(arg => {
   if (name === "outputcache") {
     let cacheSize: number = Number(value);
     console.log("outputcache", value, "(", cacheSize, ")");
-    outputCache = new LRU({max: cacheSize});
+    outputCache = new OutputCache(cacheSize);
   }
 });
 const config: any = require(cwd+'/config');
@@ -208,11 +210,14 @@ class AttachTransactons extends Transform {
         //let rawtxs = await getRawTransactions(block.tx);
         //let txs: Transaction[] = await decodeRawTransactions(rawtxs);
         let txs: Transaction[] = await getTransactions(block.tx);
-        txs.forEach(tx => {
-          tx.vout.forEach(vout => {
-            outputCache.set(tx.txid+";"+vout.n, {value:vout.value, addresses: vout.scriptPubKey.addresses});
+        if (outputCache) {
+          txs.forEach(tx => {
+            tx.vout.forEach(vout => {
+              let compactTxid = Buffer.from(tx.txid, 'hex').toString('ucs2');
+              outputCache.set({txid:tx.txid, n: vout.n}, {valueSat:JSONtoAmount(vout.value), addresses: vout.scriptPubKey.addresses});
+            });
           });
-        });
+        }
         this.push(new BlockWithTransactions(block, txs));
         callback();
       }
@@ -235,18 +240,14 @@ class InputFetcher extends Transform {
           tx.vin.forEach(vin => {
             if (vin.coinbase) return;
             if (vin.value === undefined) {
-              let utxo: {addresses: string[], value: number};
-              if (outputCache.has(vin.txid+";"+vin.vout)) {
+              let cachedOutput: {addresses: string[], valueSat: number} = outputCache ? outputCache.get({txid:vin.txid, n: vin.vout}) : undefined;
+              if (cachedOutput !== undefined) {
                 cacheHits++;
-                utxo = outputCache.peek(vin.txid+";"+vin.vout);
-                outputCache.del(vin.txid+";"+vin.vout);
+                outputCache.del({txid:vin.txid, n: vin.vout});
+                vin.value = cachedOutput.valueSat/1e8;
+                if (cachedOutput.addresses && cachedOutput.addresses.length === 1) vin.address = cachedOutput.addresses[0];
               } else {
                 cacheMisses++;
-              }
-              if (utxo !== undefined) {
-                vin.value = utxo.value;
-                if (utxo.addresses && utxo.addresses.length === 1) vin.address = utxo.addresses[0];
-              } else {
                 if (input_txids.has(vin.txid)) return;
                 input_txids.add(vin.txid);
               }
@@ -319,11 +320,13 @@ class RestBlockReader extends Readable {
           this.push(null);
         else while (true) {
           let block: BlockWithTransactions = await restblock(this.currentHash);
-          block.tx.forEach(tx => {
-            tx.vout.forEach(vout => {
-              outputCache.set(tx.txid+";"+vout.n, {value:vout.value, addresses: vout.scriptPubKey.addresses});
+          if (outputCache) {
+            block.tx.forEach(tx => {
+              tx.vout.forEach(vout => {
+                outputCache.set({txid: tx.txid, n:vout.n}, {valueSat:JSONtoAmount(vout.value), addresses: vout.scriptPubKey.addresses});
+              });
             });
-          });
+          }
           this.currentHash = block.nextblockhash;
           this.currentHeight = block.height+1;
           let shouldBreak = this.push(block);
@@ -410,7 +413,7 @@ async function doProcessing() {
     setTimeout(doProcessing, 10000);
     return;
   }
-  if (startHeight === 0) outputCache.reset();
+  if (startHeight === 0 && outputCache) outputCache.clear();
   let startHash: string = await blockService.getRpcBlockHash(startHeight);
   let blockReader = new RestBlockReader(startHash, toHeight);
   //let txAttacher = new attachTransactons();
@@ -429,6 +432,6 @@ async function doProcessing() {
     console.log("inputAttacher", inputAttacher.readableLength, inputAttacher.writableLength);
     console.log("blockWriter", blockWriter.writableLength);
     console.log("cacheHit rate: "+ cacheHits/(cacheHits+cacheMisses) );
-    console.log("utxocache length", outputCache.length);
+    if (outputCache) console.log("utxocache length", outputCache.size);
   }, 5000);
 }

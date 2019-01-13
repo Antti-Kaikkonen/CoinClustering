@@ -1,19 +1,26 @@
-import bs58 from 'bs58';
 import * as lexi from 'lexint';
+import { AddressEncodingService } from '../services/address-encoding-service';
+import { BinaryDB } from '../services/binary-db';
 import { db_address_cluster_prefix } from "../services/db-constants";
 import { PrefixTable } from './prefix-table';
 
 export class AddressClusterTable extends PrefixTable< { address: string}, { clusterId: number }> {
 
+  constructor(db: BinaryDB, private addressEncodingService: AddressEncodingService) {
+    super(db);
+  }
+
   prefix = db_address_cluster_prefix;
 
   keyencoding = {
     encode: (key: { address: string}): Buffer => {
-        return bs58.decode(key.address);
+      return this.addressEncodingService.addressToBytes(key.address);
+        //return bs58.decode(key.address);
     },
     decode: (buf: Buffer): { address: string } => {
       return {
-        address: bs58.encode(buf)
+        address: this.addressEncodingService.bytesToAddress(buf)
+        //address: bs58.encode(buf)
       }
     }
   };

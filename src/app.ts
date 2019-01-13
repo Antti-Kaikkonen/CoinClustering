@@ -7,6 +7,7 @@ import { Readable, Transform, Writable } from 'stream';
 import { ClusterController } from './app/controllers/cluster-controller';
 import { Block, BlockWithTransactions } from './app/models/block';
 import { Transaction } from './app/models/transaction';
+import { AddressEncodingService } from './app/services/address-encoding-service';
 import { BinaryDB } from './app/services/binary-db';
 import { BlockImportService } from './app/services/block-import-service';
 import { BlockService } from './app/services/block-service';
@@ -21,10 +22,13 @@ import { JSONtoAmount } from './app/utils/utils';
 
 //export NODE_OPTIONS="--max_old_space_size=16384"
 
+let cwd = process.cwd();
+const config: any = require(cwd+'/config');
+
+let addressEncodingService = new AddressEncodingService(config.pubkeyhash, config.scripthash, config.segwitprefix);
+
 let outputCache: OutputCache;
 
-
-let cwd = process.cwd();
 let args = process.argv.slice(2);
 args.forEach(arg => {
   let components = arg.split("=");
@@ -34,10 +38,9 @@ args.forEach(arg => {
   if (name === "outputcache") {
     let cacheSize: number = Number(value);
     console.log("outputcache", value, "(", cacheSize, ")");
-    outputCache = new OutputCache(cacheSize);
+    outputCache = new OutputCache(cacheSize, addressEncodingService);
   }
 });
-const config: any = require(cwd+'/config');
 
 
 var rpc = new RpcClient(config);
@@ -52,13 +55,13 @@ let db = new BinaryDB(EncodingDown<Buffer, Buffer>(leveldown, {keyEncoding: 'bin
 
 let clusterBalanceService = new ClusterBalanceService(db);
 
-let clusterAddressService = new ClusterAddressService(db);
+let clusterAddressService = new ClusterAddressService(db, addressEncodingService);
 
 let blockService = new BlockService(db, rpc);
 
-let clusterController = new ClusterController(db);
+let clusterController = new ClusterController(db, addressEncodingService);
 
-let blockImportService = new BlockImportService(db, clusterAddressService, clusterBalanceService, blockService);
+let blockImportService = new BlockImportService(db, clusterAddressService, clusterBalanceService, blockService, addressEncodingService);
 
 const app = express();
 app.get("/hello", clusterController.clusterCurrentBalances);

@@ -1,6 +1,6 @@
 {
   "name": "coin-clustering",
-  "version": "0.0.15",
+  "version": "0.0.16",
   "description": "Address clustering for bitcoin based cryptocurrencies",
   "scripts": {
     "start": "ts-node src/app.ts",
@@ -12,6 +12,7 @@
     "coin-clustering": "./bin/coin-clustering"
   },
   "dependencies": {
+    "bech32": "^1.1.3",
     "bitcoind-rpc": "^0.7.2",
     "bs58": "^4.0.1",
     "encoding-down": "^5.0.4",

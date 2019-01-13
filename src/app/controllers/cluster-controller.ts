@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { AddressEncodingService } from '../services/address-encoding-service';
 import { BinaryDB } from '../services/binary-db';
 import { ClusterAddressService } from '../services/cluster-address-service';
 import { ClusterBalanceService } from '../services/cluster-balance-service';
@@ -11,9 +12,9 @@ export class ClusterController {
   private clusterAddressService: ClusterAddressService;
   private balanceToClusterTable: BalanceToClusterTable;
 
-  constructor(private db: BinaryDB) {
+  constructor(private db: BinaryDB, addressEncodingService: AddressEncodingService) {
     this.clusterBalanceService = new ClusterBalanceService(db);
-    this.clusterAddressService = new ClusterAddressService(db);
+    this.clusterAddressService = new ClusterAddressService(db, addressEncodingService);
     this.balanceToClusterTable = new BalanceToClusterTable(db);
   }  
 

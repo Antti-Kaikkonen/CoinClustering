@@ -4,6 +4,7 @@ import EncodingDown from 'encoding-down';
 import LevelDOWN from 'leveldown';
 import 'mocha';
 import { BlockWithTransactions } from './app/models/block';
+import { AddressEncodingService } from './app/services/address-encoding-service';
 import { BinaryDB } from './app/services/binary-db';
 import { BlockImportService } from './app/services/block-import-service';
 import { BlockService } from './app/services/block-service';
@@ -16,6 +17,8 @@ describe('Save a blocks with 3 transactions', () => {
   const dbpath = './test-db';
 
   let db;
+
+  let addressEncodingService = new AddressEncodingService(0x4c, 0x10, null);
 
   let clusterAddressService: ClusterAddressService;
   let clusterBalanceService: ClusterBalanceService;
@@ -32,15 +35,20 @@ describe('Save a blocks with 3 transactions', () => {
       });
     });
     db = new BinaryDB(EncodingDown<Buffer, Buffer>(LevelDOWN(dbpath), {keyEncoding: 'binary', valueEncoding: 'binary'}), {errorIfExists: true});
-    clusterAddressService = new ClusterAddressService(db);
+    clusterAddressService = new ClusterAddressService(db, addressEncodingService);
     clusterBalanceService = new ClusterBalanceService(db);
     blockService = new BlockService(db, rpc);
-    blockImportService = new BlockImportService(db, clusterAddressService, clusterBalanceService, blockService);
+    blockImportService = new BlockImportService(db, clusterAddressService, clusterBalanceService, blockService, addressEncodingService);
 
     await blockImportService.saveBlock(b1);
   });
 
 
+  let address1 = "XcEAhjPb3ZCz5KAzwGjSikvCACiVzwtFez";
+  let address2 = "XcYGbqfqHPXhRUTF6W9GER26PshWEd7NQ2";
+  let address3 = "Xd2KPkq2sBubxU2Cqd9Ym2hmdkKC8qhMS6";
+  let address4 = "XegLiYX89Lapmz5zRas4J5fbq6L4YxBSTm";
+  
   let b1: BlockWithTransactions = {
     confirmations: null,
     size: null,
@@ -72,7 +80,7 @@ describe('Save a blocks with 3 transactions', () => {
             "value":10/100000000,
             "scriptPubKey":{
               "addresses":[
-                  "address1"
+                address1
               ],
               asm: null,
               hex: null,
@@ -85,7 +93,7 @@ describe('Save a blocks with 3 transactions', () => {
             "value":10/100000000,
             "scriptPubKey":{
               "addresses":[
-                  "address2"
+                address2
               ],
               asm: null,
               hex: null,
@@ -98,7 +106,7 @@ describe('Save a blocks with 3 transactions', () => {
             "value":10/100000000,
             "scriptPubKey":{
               "addresses":[
-                  "address3"
+                address3
               ],
               asm: null,
               hex: null,
@@ -111,7 +119,7 @@ describe('Save a blocks with 3 transactions', () => {
             "value":10/100000000,
             "scriptPubKey":{
               "addresses":[
-                  "address4"
+                address4
               ],
               asm: null,
               hex: null,
@@ -130,7 +138,7 @@ describe('Save a blocks with 3 transactions', () => {
         "vin":[
             {
               "value":2/100000000,
-              "address":"address1",
+              "address":address1,
               scriptSig: null,
               sequence: null
             }
@@ -140,7 +148,7 @@ describe('Save a blocks with 3 transactions', () => {
             "value":1/100000000,
             "scriptPubKey":{
               "addresses":[
-                "address2"
+                address2
               ],
               asm: null,
               hex: null,
@@ -153,7 +161,7 @@ describe('Save a blocks with 3 transactions', () => {
             "value":1/100000000,
             "scriptPubKey":{
               "addresses":[
-                "address3"
+                address3
               ],
               asm: null,
               hex: null,
@@ -172,13 +180,13 @@ describe('Save a blocks with 3 transactions', () => {
         "vin":[
             {
               "value":11/100000000,
-              "address":"address3",
+              "address":address3,
               scriptSig: null,
               sequence: null
             },
             {
               "value":10/100000000,
-              "address":"address4",
+              "address":address4,
               scriptSig: null,
               sequence: null
             }
@@ -188,7 +196,7 @@ describe('Save a blocks with 3 transactions', () => {
             "value":20/100000000,
             "scriptPubKey":{
               "addresses":[
-                "address2"
+                address2
               ],
               asm: null,
               hex: null,
@@ -204,51 +212,51 @@ describe('Save a blocks with 3 transactions', () => {
 
 
   it('address3 and address4 should be in the same cluster', async () => {
-    let c1 = await clusterAddressService.getAddressCluster("address3");
-    let c2 = await clusterAddressService.getAddressCluster("address4");
+    let c1 = await clusterAddressService.getAddressCluster(address3);
+    let c2 = await clusterAddressService.getAddressCluster(address4);
     expect(c1).to.equal(c2);
   });
 
   it('address3 cluster should contain two addresses', async () => {
-    let c1 = await clusterAddressService.getAddressCluster("address3");
+    let c1 = await clusterAddressService.getAddressCluster(address3);
     let addresses = await clusterAddressService.getClusterAddresses(c1);
     expect(addresses).lengthOf(2);
   });
 
   it('address1 cluster should not contain other addresses', async () => {
-    let c1 = await clusterAddressService.getAddressCluster("address1");
+    let c1 = await clusterAddressService.getAddressCluster(address1);
     let addresses = await clusterAddressService.getClusterAddresses(c1);
     expect(addresses).lengthOf(1);
-    expect(addresses).to.include("address1");
+    expect(addresses).to.include(address1);
   });
 
   it('address2 cluster balance should be 32 satoshis', async () => {
-    let c = await clusterAddressService.getAddressCluster("address2");
+    let c = await clusterAddressService.getAddressCluster(address2);
     let balance = await clusterBalanceService.getBalance(c);
     expect(balance).to.equal(31);
   });
 
   it('address1 cluster balance should be 8 satoshis', async () => {
-    let c = await clusterAddressService.getAddressCluster("address1");
+    let c = await clusterAddressService.getAddressCluster(address1);
     let balance = await clusterBalanceService.getBalance(c);
     expect(balance).to.equal(8);
   });
 
   it('address3 cluster should contain 3 transactions', async () => {
-    let c = await clusterAddressService.getAddressCluster("address3");
+    let c = await clusterAddressService.getAddressCluster(address3);
     let transactions = await clusterBalanceService.getClusterTransactions(c);
     expect(transactions).lengthOf(3);
   });
 
   it('address3 cluster transaction indexes should be [0, 1, 2]', async () => {
-    let c = await clusterAddressService.getAddressCluster("address3");
+    let c = await clusterAddressService.getAddressCluster(address3);
     let transactions = await clusterBalanceService.getClusterTransactions(c);
     let indexes = transactions.map(tx => tx.id);
     expect(indexes).to.deep.equal([0, 1, 2]);
   });
 
   it('address3 cluster balance should be 0', async () => {
-    let c = await clusterAddressService.getAddressCluster("address3");
+    let c = await clusterAddressService.getAddressCluster(address3);
     let balance = await clusterBalanceService.getBalance(c);
     expect(balance).to.equal(0);
   });

@@ -9,6 +9,7 @@ import { LastSavedTxHeightTable } from "../tables/last-saved-tx-height-table";
 import { LastSavedTxNTable } from "../tables/last-saved-tx-n-table";
 import { NextClusterIdTable } from "../tables/next-cluster-id-table";
 import { JSONtoAmount } from "../utils/utils";
+import { AddressEncodingService } from "./address-encoding-service";
 import { BinaryDB } from "./binary-db";
 import { BlockService } from "./block-service";
 import { ClusterAddressService } from "./cluster-address-service";
@@ -26,8 +27,9 @@ export class BlockImportService {
   constructor(private db: BinaryDB,
     private clusterAddressService: ClusterAddressService, 
     private clusterBalanceService: ClusterBalanceService,
-    private blockService: BlockService) {
-      this.addressClusterTable = new AddressClusterTable(db);
+    private blockService: BlockService,
+    private addressEncodingService: AddressEncodingService) {
+      this.addressClusterTable = new AddressClusterTable(db, addressEncodingService);
       this.clusterMergedToTable = new ClusterMergedToTable(db);
       this.nextClusterIdTable = new NextClusterIdTable(db);
       this.lastMergedHeightTable = new LastMergedHeightTable(db);

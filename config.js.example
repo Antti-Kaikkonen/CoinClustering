@@ -4,7 +4,10 @@ let config = {
   pass: 'local321',
   host: '127.0.0.1',
   port: 9998,
-  listen_port: 3007
+  listen_port: 3007,
+  pubkeyhash: 0x4c,
+  scripthash: 0x10,
+  segwitprefix: null
 };
 
 module.exports = config;

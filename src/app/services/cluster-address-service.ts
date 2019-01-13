@@ -3,6 +3,7 @@ import { AddressClusterTable } from '../tables/address-cluster-table';
 import { ClusterAddressCountTable } from '../tables/cluster-address-count-table';
 import { ClusterAddressTable } from '../tables/cluster-address-table';
 import { NextClusterIdTable } from '../tables/next-cluster-id-table';
+import { AddressEncodingService } from './address-encoding-service';
 //import { integer2LexString } from '../utils/utils';
 import { BinaryDB } from './binary-db';
 
@@ -15,11 +16,11 @@ export class ClusterAddressService {
   nextClusterIdTable: NextClusterIdTable;
   addressClusterTable: AddressClusterTable;
 
-  constructor(private db: BinaryDB) {
-    this.clusterAddressTable = new ClusterAddressTable(db);
+  constructor(private db: BinaryDB, addressEncodingService: AddressEncodingService) {
+    this.clusterAddressTable = new ClusterAddressTable(db, addressEncodingService);
     this.clusterAddressCountTable = new ClusterAddressCountTable(db);
     this.nextClusterIdTable = new NextClusterIdTable(db);
-    this.addressClusterTable = new AddressClusterTable(db);
+    this.addressClusterTable = new AddressClusterTable(db, addressEncodingService);
   }  
 
   async getAddressCluster(address: string): Promise<number> {

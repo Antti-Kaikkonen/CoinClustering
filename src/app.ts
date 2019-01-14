@@ -366,6 +366,56 @@ class BlockReader extends Readable {
   }
 };  
 
+class BlockByHeightReader extends Readable {
+  currentHeight: number;
+  constructor(startHeight: number, stopHeight: number) {
+    super({
+      objectMode: true,
+      highWaterMark: 4,
+      read: async (size) => {
+        if (this.currentHeight !== undefined && this.currentHeight > stopHeight) 
+          this.push(null);
+        else while (true) {
+          let promise = new Promise<BlockWithTransactions>((resolve, reject) => {
+            rpc.getBlockHash(this.currentHeight, (err, res) => {
+              let hash: string = res.result;
+              restblock(hash).then((block: BlockWithTransactions) => {
+                if (outputCache) {
+                  block.tx.forEach(tx => {
+                    tx.vout.forEach(vout => {
+                      outputCache.set({txid: tx.txid, n:vout.n}, {valueSat:JSONtoAmount(vout.value), addresses: vout.scriptPubKey.addresses});
+                    });
+                  });
+                }
+                resolve(block);
+              });
+            });
+          });
+          this.currentHeight++;
+          let shouldBreak = this.push(promise);
+          break;//if (shouldBreak) break;//async push fixed in node 10 https://github.com/nodejs/node/pull/17979
+        }
+        
+      }
+    });
+    this.currentHeight = startHeight;
+  }
+};
+
+class BlockAttacher extends Transform {
+  constructor() {
+    super({
+      objectMode: true,
+      highWaterMark: 2,
+      transform: async (blockPromise:  Promise<BlockWithTransactions> , encoding, callback) => {
+        let block = await blockPromise;
+        this.push(block);
+        callback();
+      }
+    });
+  }
+};  
+
 
 async function getRpcHeight(): Promise<number> {
   return new Promise<number>((resolve, reject) => {
@@ -417,14 +467,17 @@ async function doProcessing() {
     return;
   }
   if (startHeight === 0 && outputCache) outputCache.clear();
-  let startHash: string = await blockService.getRpcBlockHash(startHeight);
-  let blockReader = new RestBlockReader(startHash, toHeight);
+  //let startHash: string = await blockService.getRpcBlockHash(startHeight);
+  let blockReader = new BlockByHeightReader(startHeight, toHeight);
+  let blockAttacher = new BlockAttacher();
+  //let blockReader = new RestBlockReader(startHash, toHeight);
   //let txAttacher = new attachTransactons();
   let inputFetcher = new InputFetcher();
   let inputAttacher = new InputAttacher();
 
   let interval = setInterval(()=>{
     console.log("blockReader",blockReader.readableLength);
+    console.log("blockAttacher", blockAttacher.readableLength, blockAttacher.writableLength)
     //console.log("txAttacher", txAttacher.readableLength, txAttacher.writableLength);
     console.log("inputFetcher", inputFetcher.readableLength, inputFetcher.writableLength);
     console.log("inputAttacher", inputAttacher.readableLength, inputAttacher.writableLength);
@@ -433,7 +486,7 @@ async function doProcessing() {
     if (outputCache) console.log("utxocache length", outputCache.size);
   }, 5000);
 
-  blockReader.pipe(inputFetcher).pipe(inputAttacher).pipe(blockWriter);
+  blockReader.pipe(blockAttacher).pipe(inputFetcher).pipe(inputAttacher).pipe(blockWriter);
   blockReader.on('end', () => {
   });
   blockWriter.on('finish', () => {

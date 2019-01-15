@@ -58,9 +58,13 @@ export abstract class PrefixTable<K, V> implements Table<K, V> {
   }
 
   async get(key: K): Promise<V> {
-    let valueAsBuffer: Buffer = await this.db.get(this.keyAsBuffer(key));
-    //console.log("VALUE AS BUFFER", typeof valueAsBuffer);
-    return this.valueencoding.decode(valueAsBuffer);
+    return new Promise<V>((resolve, reject) => {
+      this.db.get(this.keyAsBuffer(key)).then(valueAsBuffer => {
+        resolve(this.valueencoding.decode(valueAsBuffer));
+      }, (err) => {
+        reject(err);
+      })
+    });
   }
 
   async put(key: K, value: V): Promise<void> {

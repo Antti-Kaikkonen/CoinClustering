@@ -1,3 +1,4 @@
+import { AbstractBatch } from 'abstract-leveldown';
 import RpcClient from 'bitcoind-rpc';
 import EncodingDown from 'encoding-down';
 import express from 'express';
@@ -5,7 +6,7 @@ import http from 'http';
 import LevelDOWN from 'leveldown';
 import { Readable, Transform, Writable } from 'stream';
 import { ClusterController } from './app/controllers/cluster-controller';
-import { Block, BlockWithTransactions } from './app/models/block';
+import { BlockWithTransactions } from './app/models/block';
 import { Transaction } from './app/models/transaction';
 import { AddressEncodingService } from './app/services/address-encoding-service';
 import { BinaryDB } from './app/services/binary-db';
@@ -13,7 +14,7 @@ import { BlockImportService } from './app/services/block-import-service';
 import { BlockService } from './app/services/block-service';
 import { ClusterAddressService } from './app/services/cluster-address-service';
 import { ClusterBalanceService } from './app/services/cluster-balance-service';
-import { OutputCache } from './app/services/output-cache';
+import { OutputCacheTable } from './app/tables/output-cache-table';
 import { JSONtoAmount } from './app/utils/utils';
 
 
@@ -27,21 +28,6 @@ const config: any = require(cwd+'/config');
 
 let addressEncodingService = new AddressEncodingService(config.pubkeyhash, config.scripthash, config.segwitprefix);
 
-let outputCache: OutputCache;
-
-let args = process.argv.slice(2);
-args.forEach(arg => {
-  let components = arg.split("=");
-  if (components.length !== 2) return;
-  let name = components[0];
-  let value = components[1];
-  if (name === "outputcache") {
-    let cacheSize: number = Number(value);
-    console.log("outputcache", value, "(", cacheSize, ")");
-    outputCache = new OutputCache(cacheSize, addressEncodingService);
-  }
-});
-
 
 var rpc = new RpcClient(config);
 let leveldown = LevelDOWN(cwd+'/db');
@@ -49,7 +35,7 @@ let leveldown = LevelDOWN(cwd+'/db');
 
 let db = new BinaryDB(EncodingDown<Buffer, Buffer>(leveldown, {keyEncoding: 'binary', valueEncoding: 'binary'}), {
   writeBufferSize: 8 * 1024 * 1024,
-  cacheSize: 256 * 1024 * 1024,
+  cacheSize: 1000 * 1024 * 1024,
   compression: true
 });
 
@@ -62,6 +48,8 @@ let blockService = new BlockService(db, rpc);
 let clusterController = new ClusterController(db, addressEncodingService);
 
 let blockImportService = new BlockImportService(db, clusterAddressService, clusterBalanceService, blockService, addressEncodingService);
+
+let outputCacheTable = new OutputCacheTable(db, addressEncodingService);
 
 const app = express();
 app.get("/hello", clusterController.clusterCurrentBalances);
@@ -80,76 +68,10 @@ async function getBlockByHash(hash: string) {
   });
 }
 
-async function decodeRawTransactionsHelper(rawtxs: any[]): Promise<Transaction[]> {
-  let batchCall = () => {
-    rawtxs.forEach(rawtx => rpc.decodeRawTransaction(rawtx));
-  }
-  return new Promise<any>((resolve, reject) => {
-
-    let txids = [];
-
-    rpc.batch(batchCall, (err, txs) => {
-      if (err) reject(err)
-      else if (txs.length > 0 && txs[0].error) reject(txs[0].error.message)
-      else resolve(txs.map(tx => tx.result)); 
-    });
-  });
-}
-
 
 //Each batch is executed concurrently in bitcoin core so making this value too large can lower performance. Too low value will increase overhead and exchaust rpcworkqueue
 //Recommended to set rpcworkqueue=1024 and rpcthreads=64 in bitcoin.conf.
 let rpc_batch_size = 30;
-
-async function decodeRawTransactions(rawtxs: any[]): Promise<Transaction[]> {
-  let res = [];
-  let from = 0;
-  let promises = [];
-  while (from < rawtxs.length) {
-    promises.push(decodeRawTransactionsHelper(rawtxs.slice(from, from+rpc_batch_size)));
-    if (promises.length > 500) {
-      let batches = await Promise.all(promises);
-      batches.forEach(txs => txs.forEach(tx =>res.push(tx)));
-      promises = [];
-    }
-    from+=rpc_batch_size;
-  }
-  let batches = await Promise.all(promises);
-  batches.forEach(txs => txs.forEach(tx =>res.push(tx)));
-  return res;
-}
-
-async function getRawTransactionsHelper(txids: string[]): Promise<string[]> {
-  let batchCall = () => {
-    txids.forEach(txid => rpc.getRawTransaction(txid));
-  }
-  return new Promise<any>((resolve, reject) => {
-    rpc.batch(batchCall, (err, rawtxs) => {
-      if (err) reject(err)
-      else if (rawtxs.length > 0 && rawtxs[0].error) reject(rawtxs[0].error.message)
-      else resolve(rawtxs.map(rawtx => rawtx.result));
-    });
-  });  
-}
-
-async function getRawTransactions(txids: string[]): Promise<string[]> {
-  let res: string[] = [];
-  let from = 0;
-  let promises = [];
-  while (from < txids.length) {
-    promises.push(getRawTransactionsHelper(txids.slice(from, from+rpc_batch_size)));//To avoid HTTP 413 error
-
-    if (promises.length > 500) {
-      let batches = await Promise.all(promises);
-      batches.forEach(txs => txs.forEach(tx =>res.push(tx)));
-      promises = [];
-    }
-    from+=rpc_batch_size;
-  }
-  let batches = await Promise.all(promises);
-  batches.forEach(rawtxs => rawtxs.forEach(rawtx =>res.push(rawtx)));
-  return res;
-}
 
 
 async function getTransactionsHelper(txids: string[]): Promise<Transaction[]> {
@@ -201,74 +123,52 @@ async function restblock(hash: string): Promise<BlockWithTransactions> {
   });
 }
 
-
-//let utxoCache: Map<string, {value: number, addresses: string[]}> = new Map();
-
-class AttachTransactons extends Transform {
-  constructor() {
-    super({
-      objectMode: true,
-      //highWaterMark: 256,
-      transform: async (block: Block, encoding, callback) => {
-        //let rawtxs = await getRawTransactions(block.tx);
-        //let txs: Transaction[] = await decodeRawTransactions(rawtxs);
-        let txs: Transaction[] = await getTransactions(block.tx);
-        if (outputCache) {
-          txs.forEach(tx => {
-            tx.vout.forEach(vout => {
-              let compactTxid = Buffer.from(tx.txid, 'hex').toString('ucs2');
-              outputCache.set({txid:tx.txid, n: vout.n}, {valueSat:JSONtoAmount(vout.value), addresses: vout.scriptPubKey.addresses});
-            });
-          });
-        }
-        this.push(new BlockWithTransactions(block, txs));
-        callback();
-      }
-    });
-  }
-}
-
-let cacheHits: number = 0;
-let cacheMisses: number = 0;
-
 class InputFetcher extends Transform {
   
   constructor() {
     super({
       objectMode: true,
+      //highWaterMark: 64,
       highWaterMark: 2,
       transform: (block: BlockWithTransactions, encoding, callback) => {
         let input_txids: Set<string> = new Set();
+        let promises = [];
+        let pendingOutputs = 0;
         block.tx.forEach((tx, n) => {
           tx.vin.forEach(vin => {
             if (vin.coinbase) return;
             if (vin.value === undefined) {
-              let cachedOutput: {addresses: string[], valueSat: number} = outputCache ? outputCache.get({txid:vin.txid, n: vin.vout}) : undefined;
-              if (cachedOutput !== undefined) {
-                cacheHits++;
-                outputCache.del({txid:vin.txid, n: vin.vout});
-                vin.value = cachedOutput.valueSat/1e8;
-                if (cachedOutput.addresses && cachedOutput.addresses.length === 1) vin.address = cachedOutput.addresses[0];
-              } else {
-                cacheMisses++;
-                if (input_txids.has(vin.txid)) return;
-                input_txids.add(vin.txid);
-              }
+              pendingOutputs++;
+              let promise = outputCacheTable.get({txid:vin.txid, n:vin.vout});
+              let promise2 = new Promise((resolve, reject) => {
+                promise.then((cachedOutput: {addresses: string[], valueSat: number}) => {
+                  vin.value = cachedOutput.valueSat/1e8;
+                  if (cachedOutput.addresses && cachedOutput.addresses.length === 1) vin.address = cachedOutput.addresses[0];
+                  resolve();
+                }, (err) => {
+                  if (input_txids.has(vin.txid)) resolve();
+                  input_txids.add(vin.txid);
+                  resolve();
+                });
+              });
+              promises.push(promise2);
             }
           });
         });
-        let result: {
+        Promise.all(promises).then(() => {
+          let result: {
             block: BlockWithTransactions, 
             inputTxsPromise?: Promise<Transaction[]>
           } = {
             block: block
           }
-        if (input_txids.size > 0) {
-          console.log("attaching inputs...", input_txids.size);
-          result.inputTxsPromise = getTransactions(Array.from(input_txids));
-        }
-        this.push(result);
-        callback();
+          if (input_txids.size > 0) {
+            console.log("attaching inputs...", input_txids.size);
+            result.inputTxsPromise = getTransactions(Array.from(input_txids));
+          }
+          this.push(result);
+          callback();
+        });
       }
     });
   }
@@ -279,6 +179,7 @@ class InputAttacher extends Transform {
   constructor() {
     super({
       objectMode: true,
+      //highWaterMark: 64,
       highWaterMark: 2,
       transform: async (blockAndInputs: {block: BlockWithTransactions, inputTxsPromise?: Promise<Transaction[]>} , encoding, callback) => {
         let block = blockAndInputs.block;
@@ -311,61 +212,6 @@ class InputAttacher extends Transform {
 }
 
 
-class RestBlockReader extends Readable {
-  currentHash: string;
-  currentHeight: number;
-  constructor(hash: string, stopHeight: number) {
-    super({
-      objectMode: true,
-      highWaterMark: 16,
-      read: async (size) => {
-        if (this.currentHeight !== undefined && this.currentHeight > stopHeight) 
-          this.push(null);
-        else while (true) {
-          let block: BlockWithTransactions = await restblock(this.currentHash);
-          if (outputCache) {
-            block.tx.forEach(tx => {
-              tx.vout.forEach(vout => {
-                outputCache.set({txid: tx.txid, n:vout.n}, {valueSat:JSONtoAmount(vout.value), addresses: vout.scriptPubKey.addresses});
-              });
-            });
-          }
-          this.currentHash = block.nextblockhash;
-          this.currentHeight = block.height+1;
-          let shouldBreak = this.push(block);
-          break;//if (shouldBreak) break;//async push fixed in node 10 https://github.com/nodejs/node/pull/17979
-        }
-        
-      }
-    });
-    this.currentHash = hash;
-  }
-};  
-
-class BlockReader extends Readable {
-  currentHash: string;
-  currentHeight: number;
-  constructor(hash: string, stopHeight: number) {
-    super({
-      objectMode: true,
-      //highWaterMark: 256,
-      read: async (size) => {
-        if (this.currentHeight !== undefined && this.currentHeight > stopHeight) 
-          this.push(null);
-        else while (true) {
-          let block: Block = await getBlockByHash(this.currentHash);
-          this.currentHash = block.nextblockhash;
-          this.currentHeight = block.height+1;
-          let shouldBreak = this.push(block);
-          break;//if (shouldBreak) break;//async push fixed in node 10 https://github.com/nodejs/node/pull/17979
-        }
-        
-      }
-    });
-    this.currentHash = hash;
-  }
-};  
-
 class BlockByHeightReader extends Readable {
   currentHeight: number;
   constructor(startHeight: number, stopHeight: number) {
@@ -380,14 +226,23 @@ class BlockByHeightReader extends Readable {
             rpc.getBlockHash(this.currentHeight, (err, res) => {
               let hash: string = res.result;
               restblock(hash).then((block: BlockWithTransactions) => {
-                if (outputCache) {
-                  block.tx.forEach(tx => {
-                    tx.vout.forEach(vout => {
-                      outputCache.set({txid: tx.txid, n:vout.n}, {valueSat:JSONtoAmount(vout.value), addresses: vout.scriptPubKey.addresses});
-                    });
+                let cacheOps: AbstractBatch<Buffer, Buffer>[] = [];
+                block.tx.forEach(tx => {
+                  tx.vout.forEach(vout => {
+                    try {
+                      cacheOps.push(
+                        outputCacheTable.putOperation({txid: tx.txid, n: vout.n}, {valueSat: JSONtoAmount(vout.value), addresses: vout.scriptPubKey.addresses})
+                      );
+                    } catch(err) {
+                      console.log("ERR:", vout.value, JSONtoAmount(vout.value), vout.n);
+                    }
+                  
+                      //outputCache.set({txid: tx.txid, n:vout.n}, {valueSat:JSONtoAmount(vout.value), addresses: vout.scriptPubKey.addresses});
                   });
-                }
-                resolve(block);
+                });
+                db.batchBinary(cacheOps).then(() => {
+                  resolve(block);
+                })
               });
             });
           });
@@ -426,6 +281,17 @@ async function getRpcHeight(): Promise<number> {
   });
 }
 
+async function deleteBlockInputs(block: BlockWithTransactions) {
+  let delOps = [];
+  block.tx.forEach(tx => {
+    tx.vin.forEach(vin => {
+      if (vin.coinbase) return;
+      delOps.push(outputCacheTable.delOperation({txid: vin.txid, n: vin.vout}));
+    });
+  });
+  db.batchBinary(delOps);
+}
+
 
 doProcessing();
 
@@ -447,6 +313,7 @@ async function doProcessing() {
       //highWaterMark: 256,
       write: async (block: BlockWithTransactions, encoding, callback) => {
         await blockImportService.blockMerging(block);
+        deleteBlockInputs(block);
         callback(null);
       }
     });
@@ -459,6 +326,7 @@ async function doProcessing() {
       //highWaterMark: 256,
       write: async (block: BlockWithTransactions, encoding, callback) => {
         await blockImportService.saveBlockTransactions(block);
+        deleteBlockInputs(block);
         callback(null);
       }
     });
@@ -466,7 +334,7 @@ async function doProcessing() {
     setTimeout(doProcessing, 10000);
     return;
   }
-  if (startHeight === 0 && outputCache) outputCache.clear();
+  //if (startHeight === 0 && outputCache) outputCache.clear();
   //let startHash: string = await blockService.getRpcBlockHash(startHeight);
   let blockReader = new BlockByHeightReader(startHeight, toHeight);
   let blockAttacher = new BlockAttacher();
@@ -482,8 +350,6 @@ async function doProcessing() {
     console.log("inputFetcher", inputFetcher.readableLength, inputFetcher.writableLength);
     console.log("inputAttacher", inputAttacher.readableLength, inputAttacher.writableLength);
     console.log("blockWriter", blockWriter.writableLength);
-    console.log("cacheHit rate: "+ cacheHits/(cacheHits+cacheMisses) );
-    if (outputCache) console.log("utxocache length", outputCache.size);
   }, 5000);
 
   blockReader.pipe(blockAttacher).pipe(inputFetcher).pipe(inputAttacher).pipe(blockWriter);

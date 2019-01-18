@@ -7,7 +7,6 @@ import { BlockWithTransactions } from './app/models/block';
 import { AddressEncodingService } from './app/services/address-encoding-service';
 import { BinaryDB } from './app/services/binary-db';
 import { BlockImportService } from './app/services/block-import-service';
-import { BlockService } from './app/services/block-service';
 import { ClusterAddressService } from './app/services/cluster-address-service';
 import { ClusterBalanceService } from './app/services/cluster-balance-service';
 
@@ -25,8 +24,6 @@ describe('Save a blocks with 3 transactions', () => {
 
   var rpc = new RpcClient(undefined);
 
-  let blockService: BlockService;
-
   let blockImportService: BlockImportService;
   before(async () => {
     await new Promise((resolve, reject) => {
@@ -37,8 +34,7 @@ describe('Save a blocks with 3 transactions', () => {
     db = new BinaryDB(EncodingDown<Buffer, Buffer>(LevelDOWN(dbpath), {keyEncoding: 'binary', valueEncoding: 'binary'}), {errorIfExists: true});
     clusterAddressService = new ClusterAddressService(db, addressEncodingService);
     clusterBalanceService = new ClusterBalanceService(db);
-    blockService = new BlockService(db, rpc);
-    blockImportService = new BlockImportService(db, clusterAddressService, clusterBalanceService, blockService, addressEncodingService);
+    blockImportService = new BlockImportService(db, clusterAddressService, clusterBalanceService, addressEncodingService);
 
     await blockImportService.saveBlock(b1);
   });

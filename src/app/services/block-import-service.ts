@@ -11,7 +11,6 @@ import { NextClusterIdTable } from "../tables/next-cluster-id-table";
 import { JSONtoAmount } from "../utils/utils";
 import { AddressEncodingService } from "./address-encoding-service";
 import { BinaryDB } from "./binary-db";
-import { BlockService } from "./block-service";
 import { ClusterAddressService } from "./cluster-address-service";
 import { ClusterBalanceService } from "./cluster-balance-service";
 
@@ -27,8 +26,7 @@ export class BlockImportService {
   constructor(private db: BinaryDB,
     private clusterAddressService: ClusterAddressService, 
     private clusterBalanceService: ClusterBalanceService,
-    private blockService: BlockService,
-    private addressEncodingService: AddressEncodingService) {
+    addressEncodingService: AddressEncodingService) {
       this.addressClusterTable = new AddressClusterTable(db, addressEncodingService);
       this.clusterMergedToTable = new ClusterMergedToTable(db);
       this.nextClusterIdTable = new NextClusterIdTable(db);

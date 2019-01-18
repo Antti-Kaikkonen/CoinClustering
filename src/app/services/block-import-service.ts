@@ -58,30 +58,6 @@ export class BlockImportService {
     });
     return addressToDelta;
   }
-  
-  /*private async addressBalanceChangesToClusterBalanceChanges2(addressToDelta: Map<string, number>, addressToClusterId: Map<string, number>): Promise<Map<string, number>> {
-    let promises = [];
-    let addresses = [];
-    addressToDelta.forEach((delta: number, address: string) => {
-      addresses.push(address);
-      if (addressToClusterId.has(address)) {
-        promises.push(new Promise((resolve, reject) => resolve(addressToClusterId.get(address))));
-      } else {
-        promises.push(this.db.get(db_address_cluster_prefix+address));
-      }
-      //promises.push(this.db.get(db_address_cluster_prefix+address));
-    });
-    let clusterIds = await Promise.all(promises);
-    let clusterToDelta = new Map<string, number>();
-    addresses.forEach((address: string, index: number) => {
-      let clusterId = clusterIds[index];
-      let oldBalance = clusterToDelta.get(clusterId);
-      let addressDelta = addressToDelta.get(address);
-      if (!oldBalance) oldBalance = 0;
-      clusterToDelta.set(clusterId, oldBalance+addressDelta);
-    });
-    return clusterToDelta;
-  }*/
 
   private async addressBalanceChangesToClusterBalanceChanges(addressToDelta: Map<string, number>): Promise<Map<number, number>> {
     let promises = [];
@@ -136,13 +112,6 @@ export class BlockImportService {
     } catch(err) {
       return {address: address};
     }  
-      /*this.db.get(db_address_cluster_prefix+address, (error, clusterId: string) => {
-        if (clusterId !== undefined) {
-          resolve( { address: address, clusterId: Number(clusterId) });
-        } else {
-          resolve({address: address});
-        }
-      });*/
   }
 
   async processClusters(clusters: Cluster[], lastBlockHeight: number) {
@@ -165,11 +134,6 @@ export class BlockImportService {
             ops.push(
               this.clusterMergedToTable.putOperation({fromClusterId: fromClusterId}, {toClusterId: toClusterId})
             );
-            /*ops.push({
-              type:"put",
-              key:db_cluster_merged_to+fromClusterId,
-              value:toClusterId
-            })*/
           });
         }
       }  
@@ -180,19 +144,9 @@ export class BlockImportService {
     ops.push(
       this.lastMergedHeightTable.putOperation(undefined, {height:lastBlockHeight})
     );
-    /*ops.push({
-      type:"put",
-      key:db_last_merged_block_height,
-      value:lastBlockHeight
-    });*/
     ops.push(
       this.nextClusterIdTable.putOperation(undefined, {nextClusterId: await this.getNextClusterId()})
     );
-    /*ops.push({
-      type:"put",
-      key:db_next_cluster_id,
-      value: await this.getNextClusterId()
-    });*/
 
     if (ops.length > 1000) console.log("ops.length: ", ops.length);
     await this.db.batchBinary(ops);
@@ -267,7 +221,6 @@ export class BlockImportService {
         }
       });  
     }
-    //console.log("newClusters", newClusters);
     return newClusters;
   }
 
@@ -318,18 +271,9 @@ export class BlockImportService {
     ops.push(
       this.lastSavedTxHeightTable.putOperation(undefined, {height: block.height})
     );
-    /*ops.push({
-      type: "put",
-      key: db_last_saved_tx_height,
-      value: block.height
-    });*/
     ops.push(
       this.lastSavedTxNTable.delOperation(undefined)
     )
-    /*ops.push({
-      type: "del",
-      key: db_last_saved_tx_n
-    });*/
     await this.db.batchBinary(ops);
     this.lastSavedTxN = -1;
   }
@@ -338,7 +282,6 @@ export class BlockImportService {
     if (this.lastMergedHeight === undefined) {
       try {
         this.lastMergedHeight = (await this.lastMergedHeightTable.get(undefined)).height;
-        //this.lastMergedHeight = Number(await this.db.get(db_last_merged_block_height));
       } catch (err) {
         this.lastMergedHeight = -1;
       }
@@ -350,7 +293,6 @@ export class BlockImportService {
     if (this.lastSavedTxHeight === undefined) {
       try {
         this.lastSavedTxHeight = (await this.lastSavedTxHeightTable.get(undefined)).height;
-        //this.lastSavedTxHeight = Number(await this.db.get(db_last_saved_tx_height));
       } catch (err) {
         this.lastSavedTxHeight = -1;
       }
@@ -362,7 +304,6 @@ export class BlockImportService {
     if (this.lastSavedTxN === undefined) {
       try {
         this.lastSavedTxN = (await this.lastSavedTxNTable.get(undefined)).n;
-        //this.lastSavedTxN = Number(await this.db.get(db_last_saved_tx_n));
       } catch (err) {
         this.lastSavedTxN = -1;
       }
@@ -374,7 +315,6 @@ export class BlockImportService {
     if (this.nextClusterId === undefined) {
       try {
         this.nextClusterId = (await this.nextClusterIdTable.get(undefined)).nextClusterId;
-        //this.nextClusterId = Number(await this.db.get(db_next_cluster_id));
       } catch(err) {
         this.nextClusterId = 0;
       }

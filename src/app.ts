@@ -236,8 +236,6 @@ class BlockByHeightReader extends Readable {
                     } catch(err) {
                       console.log("ERR:", vout.value, JSONtoAmount(vout.value), vout.n);
                     }
-                  
-                      //outputCache.set({txid: tx.txid, n:vout.n}, {valueSat:JSONtoAmount(vout.value), addresses: vout.scriptPubKey.addresses});
                   });
                 });
                 db.batchBinary(cacheOps).then(() => {
@@ -313,7 +311,7 @@ async function doProcessing() {
       //highWaterMark: 256,
       write: async (block: BlockWithTransactions, encoding, callback) => {
         await blockImportService.blockMerging(block);
-        deleteBlockInputs(block);
+        if (lastSavedTxHeight === -1) deleteBlockInputs(block);
         callback(null);
       }
     });
@@ -334,12 +332,8 @@ async function doProcessing() {
     setTimeout(doProcessing, 10000);
     return;
   }
-  //if (startHeight === 0 && outputCache) outputCache.clear();
-  //let startHash: string = await blockService.getRpcBlockHash(startHeight);
   let blockReader = new BlockByHeightReader(startHeight, toHeight);
   let blockAttacher = new BlockAttacher();
-  //let blockReader = new RestBlockReader(startHash, toHeight);
-  //let txAttacher = new attachTransactons();
   let inputFetcher = new InputFetcher();
   let inputAttacher = new InputAttacher();
 

@@ -25,30 +25,8 @@ export class ClusterAddressService {
 
   async getAddressCluster(address: string): Promise<number> {
     return (await this.addressClusterTable.get({address: address})).clusterId;
-    /*let key = Buffer.concat( [Buffer.from(db_address_cluster_prefix), bs58.decode(address)] );
-    let clusterIdBuffer: Buffer = await this.db.get(key);
-    return varint.decode(clusterIdBuffer);*/
   }
 
-  /*encodeClusterAddressKey(clusterId: number, addressIndex?: number): Buffer {
-    let arr: Buffer[] = [];
-    arr.push(Buffer.from(db_cluster_address_prefix));
-    arr.push(Buffer.from(varint.encode(clusterId)));
-    if (addressIndex) arr.push(lexi.pack(addressIndex));
-    return Buffer.concat(arr);
-  }
-
-  decodeClusterAddressKey(buffer: Buffer): {clusterId: number, addressIndex: number} {
-    let arr = [];
-    let prefix_length = Buffer.from(db_cluster_address_prefix).length;
-    let clusterId = varint.decode(buffer, prefix_length);
-    
-    let addressIndex = varint.decode(buffer, prefix_length+varint.encodingLength(clusterId));
-    return {
-      clusterId: clusterId,
-      addressIndex: addressIndex
-    }
-  }*/
 
   async getClusterAddresses(clusterId: number): Promise<string[]> {
     return new Promise<string[]>((resolve, reject) => {
@@ -69,24 +47,6 @@ export class ClusterAddressService {
         resolve(addresses);
       });
     });
-    /*return new Promise<any>((resolve, reject) => {
-      let addresses: string[] = [];
-      this.db.createValueStream({
-        gte: this.encodeClusterAddressKey(clusterId, 0),
-        lt: this.encodeClusterAddressKey(clusterId, Number.MAX_SAFE_INTEGER)
-      })
-      .on('data', function (data) {
-        addresses.push(bs58.encode(data));
-      })
-      .on('error', function (err) {
-        reject(err);
-      })
-      .on('close', function () {
-        resolve(addresses);
-      })
-      .on('end', function () {
-      });
-    });*/
   }
 
   async mergeClusterAddressesOps(toClusterId: number, fromClusterIds: number[], nonClusterAddresses?: string[]): Promise<AbstractBatch<Buffer, Buffer>[]> {
@@ -105,39 +65,20 @@ export class ClusterAddressService {
     fromClusterIds.forEach((fromClusterId: number, index: number) => {
       let addresses: string[] = values[1+index];
       addresses.forEach((address: string, index: number) => {
-        //console.log(toClusterId, nextIndex, address);
         ops.push(
           this.clusterAddressTable.putOperation({clusterId: toClusterId, addressIndex: nextIndex}, {address: address})
         );
-        /*ops.push({
-          type:"put", 
-          key: db_cluster_address_prefix+toClusterId+"/"+integer2LexString(nextIndex), 
-          value: bs58.decode(address)
-        });*/
         ops.push(
           this.clusterAddressTable.delOperation({clusterId: fromClusterId, addressIndex: index})
         );
-        /*ops.push({
-          type:"del", 
-          key: db_cluster_address_prefix+fromClusterId+"/"+integer2LexString(index)
-        });*/
         ops.push(
           this.addressClusterTable.putOperation({address: address}, {clusterId: toClusterId})
         );
-        /*ops.push({
-          type:"put",
-          key:db_address_cluster_prefix+bs58.decode(address),
-          value:varint.encode(toClusterId)
-        });*/
         nextIndex++;
       });
       ops.push(
         this.clusterAddressCountTable.delOperation({clusterId: fromClusterId})
       );
-      /*ops.push({
-        type:"del", 
-        key: db_cluster_address_count_prefix+fromClusterId
-      });*/
     });
     if (nonClusterAddresses !== undefined && nonClusterAddresses.length > 0) {
       let addAddressesOps = await this.addAddressesToClusterOps(nonClusterAddresses, toClusterId, nextIndex);
@@ -147,11 +88,6 @@ export class ClusterAddressService {
     ops.push(
       this.clusterAddressCountTable.putOperation({clusterId: toClusterId}, {addressCount: nextIndex})
     );
-    /*ops.push({
-      type:"put", 
-      key: db_cluster_address_count_prefix+toClusterId, 
-      value: nextIndex
-    });*/
     return ops;
   }
 
@@ -167,17 +103,7 @@ export class ClusterAddressService {
     addresses.forEach((address, index) => {
       let newIndex: number = Number(oldClusterAddressCount)+index;
       ops.push(this.clusterAddressTable.putOperation({clusterId: clusterId, addressIndex: newIndex}, {address: address}));
-      /*ops.push({
-        type: "put",
-        key: db_cluster_address_prefix+clusterId+"/"+integer2LexString(newIndex),
-        value: bs58.decode(address)
-      });*/
       ops.push(this.addressClusterTable.putOperation({address: address}, {clusterId: clusterId}));
-      /*ops.push({
-        type: "put",
-        key: db_address_cluster_prefix+bs58.decode(address),
-        value: clusterId
-      });*/
     });
     return ops;
   }
@@ -192,28 +118,13 @@ export class ClusterAddressService {
     ops.push(
       this.clusterAddressCountTable.putOperation({clusterId: clusterId}, {addressCount: clusterAddresses.length})
     );
-    /*ops.push({
-      type:"put",
-      key:db_cluster_address_count_prefix+clusterId,
-      value:clusterAddresses.length
-    });*/
     clusterAddresses.forEach((address: string, index: number) => {
       ops.push(
         this.clusterAddressTable.putOperation({clusterId, addressIndex: index}, {address: address})
       );
-      /*ops.push({
-        type: "put",
-        key: db_cluster_address_prefix+clusterId+"/"+integer2LexString(index),
-        value: bs58.decode(address)
-      });*/
       ops.push(
         this.addressClusterTable.putOperation({address: address}, {clusterId: clusterId})
       );
-      /*ops.push({
-        type: "put",
-        key: db_address_cluster_prefix+bs58.decode(address),
-        value: clusterId
-      });*/
     });
     return ops;
   }  
@@ -233,11 +144,6 @@ export class ClusterAddressService {
       next_cluster_id++;
     }
     ops.push(this.nextClusterIdTable.putOperation(undefined, {nextClusterId: next_cluster_id}));
-    /*ops.push({
-      type:"put",
-      key:db_next_cluster_id,
-      value:next_cluster_id
-    });*/
     return this.db.batchBinary(ops);
   }
 

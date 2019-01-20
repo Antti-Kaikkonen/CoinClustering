@@ -6,6 +6,7 @@ import { Readable, Transform, Writable } from 'stream';
 import { ClusterController } from './app/controllers/cluster-controller';
 import { BlockWithTransactions } from './app/models/block';
 import { Transaction } from './app/models/transaction';
+import clusterRoutes from './app/routes/cluster';
 import { AddressEncodingService } from './app/services/address-encoding-service';
 import { BinaryDB } from './app/services/binary-db';
 import { BlockImportService } from './app/services/block-import-service';
@@ -55,10 +56,8 @@ let outputCacheTable = new OutputCacheTable(db, addressEncodingService);
 const rpc_batch_size = 30;
 
 const app = express();
-app.get("/hello", clusterController.clusterCurrentBalances);
-app.get("/hello2", clusterController.clusterTransactions);
-app.get('/cluster_addresses/:id', clusterController.clusterAddresses);
-app.get('/largest_clusters', clusterController.clustersByBalance);
+
+app.use('/cluster', clusterRoutes(clusterController));
 app.listen(config.listen_port);
 
 async function deleteBlockInputs(block: BlockWithTransactions) {

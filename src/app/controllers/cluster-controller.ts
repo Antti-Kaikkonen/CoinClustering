@@ -18,24 +18,8 @@ export class ClusterController {
     this.balanceToClusterTable = new BalanceToClusterTable(db);
   }  
 
-  clusterCurrentBalances = async (req: Request, res: Response) => {
-    let from: number = Number(req.query.from);
-    if (isNaN(from)) from = 0;
-    let to: number = Number(req.query.to);
-    if (isNaN(to)) to = from+10;
-    let promises = [];
-    for (let i = from; i < to; i++) {
-      promises.push(this.clusterBalanceService.getLast(i));
-    }
-    let values = await Promise.all(promises);
-    values = values.map((v, index:number) => { 
-      return {clusterId: index+from, b: v}
-    });
-    res.send(values);
-  };
-
   clusterTransactions = async (req:Request, res:Response) => {
-    let clusterId: number = Number(req.query.id) || 0;
+    let clusterId: number = Number(req.params.id);
     let result = await this.clusterBalanceService.getClusterTransactions(clusterId);
     res.send(result);
   };
@@ -46,15 +30,29 @@ export class ClusterController {
     res.send(result);
   };
 
-  clustersByBalance = async (req:Request, res:Response) => {
+
+  largestClusters = async (req:Request, res:Response) => {
+    res.contentType('application/json');
+    let n: number = Number(req.params.n);
     let result = [];
-    this.balanceToClusterTable.createReadStream({reverse: true, limit: 1000}).on('data', (data) => {
-      result.push({
+    res.write('[');
+    let first = true;
+    let stream = this.balanceToClusterTable.createReadStream({reverse: true, limit: n})
+    .on('data', (data) => {
+      if (!first) res.write(",");
+      res.write(JSON.stringify({
         clusterId: data.key.clusterId,
         balance: data.key.balance
-      });
+      }));
+      first = false;
     }).on('finish', () => {
-      res.send(result);
+      res.write(']');
+      res.end();
+    });
+    req.on('close', () => {
+      console.log("cancelled by user. destroying");
+      stream['destroy']();
+      console.log("destroyed");
     });
   }
 

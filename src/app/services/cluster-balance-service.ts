@@ -46,7 +46,7 @@ export class ClusterBalanceService {
       .on('close', function () {
         //resolve(result);
       })
-      .on('end', function () {
+      .on('finish', function () {
         resolve(result);
       });
     });  
@@ -65,12 +65,25 @@ export class ClusterBalanceService {
   }
 
 
-  async getClusterTransactionsAfter(clusterId: number, height: number, n: number): Promise<ClusterBalance[]> {
-    
+  async firstTransactionAfter(clusterId: number, height: number, n: number, start: number, end: number): Promise<number> {
+    while (start <= end) {
+      let mid: number = Math.floor((start+end)/2);
+      let tx: ClusterBalance = await this.getClusterTransaction(clusterId, mid);
+      if (tx.height === height && tx.n === n) {
+        return tx.id;
+      } else if (tx.height < height || tx.height === height && tx.n < n) {
+        start = mid+1;
+      } else {
+        end = mid-1;
+      }
+    }
+    return start;
+  }
 
+  async getClusterTransactionsAfter(clusterId: number, height: number, n: number): Promise<ClusterBalance[]> {
     return new Promise<ClusterBalance[]>(async (resolve, reject) => {
       let res: ClusterBalance[] = [];
-
+      let resolved = false;
       let rs = this.clusterBalanceTable.createReadStream({
         gte: {clusterId: clusterId, transactionIndex: 0},
         lt: {clusterId: clusterId, transactionIndex: Number.MAX_SAFE_INTEGER},
@@ -84,10 +97,14 @@ export class ClusterBalanceService {
           data.value.n
         );
         if (cb.height > height || cb.height === height && cb.n >= n) {
-          res.unshift(cb);
+          res.push(cb);
         } else {
-          resolve(res);
-          rs['destroy']('no error');
+          if (!resolved) {
+            resolved = true;
+            res = res.reverse();
+            resolve(res);
+            rs['destroy']('no error');
+          }
         }    
       }).on('error', function (err) {
         if (err !== "no error") {
@@ -99,10 +116,14 @@ export class ClusterBalanceService {
         //resolve(res);
       })
       .on('end', function () {
-        resolve(res);
+        if (!resolved) {
+          resolved = true;
+          res = res.reverse();
+          resolve(res);
+        }
       });
     });
-  }  
+  } 
 
   async getClusterTransactions(clusterId: number): Promise<ClusterBalance[]> {
     return new Promise<ClusterBalance[]>((resolve, reject) => {
@@ -126,10 +147,7 @@ export class ClusterBalanceService {
       .on('error', function (err) {
         reject(err);
       })
-      .on('close', function () {
-        //resolve(transactions);
-      })
-      .on('end', function () {
+      .on('finish', function () {
         resolve(transactions);
       });
     });
@@ -171,7 +189,6 @@ export class ClusterBalanceService {
     let transactionsFromPromises = [];
     fromClusters.forEach(fromCluster => transactionsFromPromises.push(this.getClusterTransactions(fromCluster)));
     let values = await Promise.all(transactionsFromPromises);
-    
     let merged = [];
     fromClusters.forEach((fromCluster: number, index: number) => {
       let clusterTransactions: ClusterBalance[] = values[index];
@@ -221,13 +238,12 @@ export class ClusterBalanceService {
     }
 
     let transactionsToWithDelta = transactionsTo.map((value, index, arr) => { 
-      let delta = index === 0 ? value.balance-lastBalanceBeforeMerge : value.balance-arr[index-1].balance;
+      let delta = index === 0 ? value.balance-lastBalanceBeforeMerge : arr[index].balance-arr[index-1].balance;
       return {id: value.id, txid: value.txid, delta: delta, height: value.height, n: value.n};
     });
 
     transactionsToWithDelta.forEach(e => merged.push(e));
     this.sortAndRemoveDuplicates(merged);
-
     let balances = [];
     balances[0] = lastBalanceBeforeMerge+merged[0].delta;
     for (let i = 1; i < merged.length; i++) {

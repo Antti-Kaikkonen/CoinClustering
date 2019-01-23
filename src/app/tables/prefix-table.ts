@@ -79,9 +79,11 @@ export abstract class PrefixTable<K, V> implements Table<K, V> {
     let bufferOptions: AbstractIteratorOptions<Buffer> = {
 
     };
+    let decoder: Transform;
     if (!options) {
       bufferOptions.gte = this.prefixAsBuffer();
       bufferOptions.lt = this.nextBuffer(this.prefixAsBuffer());
+      decoder = new ReadStreamDecoder(this);
     } else {
       if (options.gt && options.gte) throw Error("Don't specify gt and gte");
       if (options.lt && options.lte) throw Error("Don't specify lt and lte");
@@ -106,11 +108,48 @@ export abstract class PrefixTable<K, V> implements Table<K, V> {
       if (options.limit !== undefined) bufferOptions.limit = options.limit;
       bufferOptions.keyAsBuffer = true;
       bufferOptions.valueAsBuffer = true;
+      bufferOptions.keys = options.keys;
+      bufferOptions.values = options.values
+      if (options.keys !== false && options.values === false) {
+        decoder = new KeyStreamDecoder(this);
+      } else if (options.keys === false && options.values !== false) {
+        decoder = new ValueStreamDecoder(this);
+      } else {
+        decoder = new ReadStreamDecoder(this);
+      }
     }
     //console.log("bufferOptions", bufferOptions);
-    return this.db.createReadStream(bufferOptions).pipe(new ReadStreamDecoder(this));
+    return this.db.createReadStream(bufferOptions).pipe(decoder);
   }
 
+}
+
+class ValueStreamDecoder<K, V> extends Transform implements EventEmitter {
+  constructor(private table: PrefixTable<K, V>) {
+    super({
+      objectMode: true,
+      transform: (value: Buffer, encoding, callback) => {
+        this.push(
+          this.table.valueencoding.decode(value)
+        );
+        callback();
+      }
+    });
+  }
+}
+
+class KeyStreamDecoder<K, V> extends Transform implements EventEmitter {
+  constructor(private table: PrefixTable<K, V>) {
+    super({
+      objectMode: true,
+      transform: (key: Buffer, encoding, callback) => {
+        this.push(
+          this.table.bufferAsKey(key)
+        );
+        callback();
+      }
+    });
+  }
 }
 
 class ReadStreamDecoder<K, V> extends Transform implements EventEmitter {

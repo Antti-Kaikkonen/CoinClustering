@@ -29,7 +29,7 @@ export class ClusterBalanceTable extends PrefixTable< { clusterId: number, trans
   valueencoding = {
     encode: (key: { txid: string, balance: number, height: number, n: number }): Buffer => {
       key.balance++;
-      if (key.balance < 0) throw Error("Balance must be non negative");
+      if (key.balance < 0) throw Error("Balance must be non negative ("+key.balance+" < 0)");
       if (!Number.isInteger(key.balance)) throw Error("Balance must be an integer");
       let txidBytes = Buffer.from(key.txid, 'hex');
       if (txidBytes.length !== TXID_BYTE_LENGTH) throw Error("TXID must be " + TXID_BYTE_LENGTH +" bytes");

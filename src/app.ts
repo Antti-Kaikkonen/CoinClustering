@@ -98,7 +98,7 @@ async function doProcessing() {
       objectMode: true,
       //highWaterMark: 256,
       write: async (block: BlockWithTransactions, encoding, callback) => {
-        await blockImportService.saveBlockTransactions(block);
+        await blockImportService.saveBlockTransactionsAsync(block);
         deleteBlockInputs(block);
         callback(null);
       }

@@ -1,9 +1,8 @@
-export class ClusterBalance {
+export class ClusterTransaction {
 
 
-  constructor(public id?: number,
-  public txid?: string,
-  public balance?: number,
+  constructor(public txid?: string,
+  public balanceDeltaSat?: number,
   public height?: number,
   public n?: number) {
   }  

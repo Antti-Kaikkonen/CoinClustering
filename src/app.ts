@@ -35,7 +35,7 @@ let rpcApi = new RpcApi(config.host, config.port, config.user, config.pass);
 
 let db = new BinaryDB(EncodingDown<Buffer, Buffer>(leveldown, {keyEncoding: 'binary', valueEncoding: 'binary'}), {
   writeBufferSize: 8 * 1024 * 1024,
-  cacheSize: 1000 * 1024 * 1024,
+  cacheSize: 300 * 1024 * 1024,
   compression: true
 });
 

@@ -8,7 +8,7 @@ import { AddressEncodingService } from './app/services/address-encoding-service'
 import { BinaryDB } from './app/services/binary-db';
 import { BlockImportService } from './app/services/block-import-service';
 import { ClusterAddressService } from './app/services/cluster-address-service';
-import { ClusterBalanceService } from './app/services/cluster-balance-service';
+import { ClusterTransactionService } from './app/services/cluster-transaction-service';
 
 describe('Save a blocks with 3 transactions', () => {
 
@@ -20,7 +20,7 @@ describe('Save a blocks with 3 transactions', () => {
   let addressEncodingService = new AddressEncodingService(0x4c, 0x10, null);
 
   let clusterAddressService: ClusterAddressService;
-  let clusterBalanceService: ClusterBalanceService;
+  let clusterTransactionService: ClusterTransactionService;
 
   var rpc = new RpcClient(undefined);
 
@@ -33,8 +33,8 @@ describe('Save a blocks with 3 transactions', () => {
     });
     db = new BinaryDB(EncodingDown<Buffer, Buffer>(LevelDOWN(dbpath), {keyEncoding: 'binary', valueEncoding: 'binary'}), {errorIfExists: true});
     clusterAddressService = new ClusterAddressService(db, addressEncodingService);
-    clusterBalanceService = new ClusterBalanceService(db);
-    blockImportService = new BlockImportService(db, clusterAddressService, clusterBalanceService, addressEncodingService);
+    clusterTransactionService = new ClusterTransactionService(db);
+    blockImportService = new BlockImportService(db, clusterAddressService, clusterTransactionService, addressEncodingService);
 
     await blockImportService.saveBlock(b1);
   });
@@ -228,32 +228,32 @@ describe('Save a blocks with 3 transactions', () => {
 
   it('address2 cluster balance should be 32 satoshis', async () => {
     let c = await clusterAddressService.getAddressCluster(address2);
-    let balance = await clusterBalanceService.getBalance(c);
+    let balance = await clusterTransactionService.getClusterBalance(c);
     expect(balance).to.equal(31);
   });
 
   it('address1 cluster balance should be 8 satoshis', async () => {
     let c = await clusterAddressService.getAddressCluster(address1);
-    let balance = await clusterBalanceService.getBalance(c);
+    let balance = await clusterTransactionService.getClusterBalance(c);
     expect(balance).to.equal(8);
   });
 
   it('address3 cluster should contain 3 transactions', async () => {
     let c = await clusterAddressService.getAddressCluster(address3);
-    let transactions = await clusterBalanceService.getClusterTransactions(c);
+    let transactions = await clusterTransactionService.getClusterTransactions(c);
     expect(transactions).lengthOf(3);
   });
 
-  it('address3 cluster transaction indexes should be [0, 1, 2]', async () => {
+  /*it('address3 cluster transaction indexes should be [0, 1, 2]', async () => {
     let c = await clusterAddressService.getAddressCluster(address3);
-    let transactions = await clusterBalanceService.getClusterTransactions(c);
+    let transactions = await clusterTransactionService.getClusterTransactions(c);
     let indexes = transactions.map(tx => tx.id);
     expect(indexes).to.deep.equal([0, 1, 2]);
-  });
+  });*/
 
   it('address3 cluster balance should be 0', async () => {
     let c = await clusterAddressService.getAddressCluster(address3);
-    let balance = await clusterBalanceService.getBalance(c);
+    let balance = await clusterTransactionService.getClusterBalance(c);
     expect(balance).to.equal(0);
   });
 

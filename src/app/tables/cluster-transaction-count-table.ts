@@ -1,10 +1,10 @@
 import * as lexi from 'lexint';
-import { db_cluster_balance_count_prefix } from "../services/db-constants";
+import { db_cluster_transaction_count_prefix } from "../services/db-constants";
 import { PrefixTable } from './prefix-table';
 
-export class ClusterBalanceCountTable extends PrefixTable< { clusterId: number}, { balanceCount: number }> {
+export class ClusterTransactionCountTable extends PrefixTable< { clusterId: number}, { balanceCount: number }> {
 
-  prefix = db_cluster_balance_count_prefix;
+  prefix = db_cluster_transaction_count_prefix;
 
   keyencoding = {
     encode: (key: { clusterId: number}): Buffer => {

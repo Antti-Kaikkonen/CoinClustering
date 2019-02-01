@@ -8,7 +8,7 @@ export const db_cluster_address_count_prefix = "b";//prefix/varint(clusterId) =>
 export const db_address_cluster_prefix = "c";//prefix/address => varint(clusterId)
 
 export const db_cluster_transaction_prefix = "d";// prefix/varint(clusterid)/lexint(#) => txid/varint(balanceAfter) (order # by 1:height, 2:index in block)
-export const db_cluster_balance_count_prefix = "f"//prefix/varint(clusterid) => varint(count);
+export const db_cluster_transaction_count_prefix = "f"//prefix/varint(clusterid) => varint(count);
 
 export const db_address_balance_prefix = "g";// prefix/address/lexint(#) => txid/varint(balanceAfter)/varint(height)/varint(n) (order # by 1:height, 2:index in block)
 export const db_address_tx_balance_prefix = "h";// prefix/address/txid => varint(#)/varint(balanceAfter)/varint(height)/varint(n)
@@ -30,3 +30,5 @@ export const db_cluster_merged_to = "o";//prefix/clusterId => clusterId (follow 
 export const db_balace_to_cluster_prefix = "p";//
 
 export const db_output_prefix = "q";//
+
+export const db_cluster_balance_prefix = "r";

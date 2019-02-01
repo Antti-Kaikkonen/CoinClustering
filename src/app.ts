@@ -10,7 +10,7 @@ import { BinaryDB } from './app/services/binary-db';
 import { BlockImportService } from './app/services/block-import-service';
 import { BlockchainReader } from './app/services/blockchain-reader';
 import { ClusterAddressService } from './app/services/cluster-address-service';
-import { ClusterBalanceService } from './app/services/cluster-balance-service';
+import { ClusterTransactionService } from './app/services/cluster-transaction-service';
 import { OutputCacheTable } from './app/tables/output-cache-table';
 import RestApi from './app/utils/rest-api';
 import RpcApi from './app/utils/rpc-api';
@@ -39,7 +39,7 @@ let db = new BinaryDB(EncodingDown<Buffer, Buffer>(leveldown, {keyEncoding: 'bin
   compression: true
 });
 
-let clusterBalanceService = new ClusterBalanceService(db);
+let clusterBalanceService = new ClusterTransactionService(db);
 
 let clusterAddressService = new ClusterAddressService(db, addressEncodingService);
 

@@ -1,3 +1,4 @@
+import cors from 'cors';
 import EncodingDown from 'encoding-down';
 import express from 'express';
 import LevelDOWN from 'leveldown';
@@ -43,7 +44,7 @@ let clusterBalanceService = new ClusterTransactionService(db);
 
 let clusterAddressService = new ClusterAddressService(db, addressEncodingService);
 
-let clusterController = new ClusterController(db, addressEncodingService);
+let clusterController = new ClusterController(db, addressEncodingService, rpcApi);
 
 let blockImportService = new BlockImportService(db, clusterAddressService, clusterBalanceService, addressEncodingService);
 
@@ -52,9 +53,13 @@ let outputCacheTable = new OutputCacheTable(db, addressEncodingService);
 let blockchainReader = new BlockchainReader(restApi, rpcApi, addressEncodingService, db);
 
 const app = express();
+app.use(cors());
 
 app.use('/cluster', clusterRoutes(clusterController));
 app.listen(config.listen_port);
+
+
+
 
 async function deleteBlockInputs(block: BlockWithTransactions) {
   let delOps = [];

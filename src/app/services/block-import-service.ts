@@ -1,7 +1,6 @@
 import { AbstractBatch } from "abstract-leveldown";
 import { BlockWithTransactions } from "../models/block";
 import { Cluster } from "../models/cluster";
-import { Transaction } from "../models/transaction";
 import { AddressClusterTable } from "../tables/address-cluster-table";
 import { BalanceToClusterTable } from "../tables/balance-to-cluster-table";
 import { ClusterBalanceTable } from "../tables/cluster-balance-table";
@@ -12,7 +11,7 @@ import { LastMergedHeightTable } from "../tables/last-merged-height-table";
 import { LastSavedTxHeightTable } from "../tables/last-saved-tx-height-table";
 import { LastSavedTxNTable } from "../tables/last-saved-tx-n-table";
 import { NextClusterIdTable } from "../tables/next-cluster-id-table";
-import { JSONtoAmount } from "../utils/utils";
+import { txAddressBalanceChanges, txAddresses, txAddressesToCluster } from "../utils/utils";
 import { AddressEncodingService } from "./address-encoding-service";
 import { BinaryDB } from "./binary-db";
 import { ClusterAddressService } from "./cluster-address-service";
@@ -52,22 +51,6 @@ export class BlockImportService {
   lastSavedTxN: number;
   nextClusterId: number;
 
-  private getTransactionAddressBalanceChanges(tx: Transaction): Map<string, number> {
-    let addressToDelta = new Map<string, number>();
-    tx.vin.filter(vin => vin.address)
-    .forEach(vin => {
-      let oldBalance = addressToDelta.get(vin.address);
-      if (!oldBalance) oldBalance = 0;
-      addressToDelta.set(vin.address, oldBalance-JSONtoAmount(vin.value));
-    }); 
-    tx.vout.filter(vout => vout.scriptPubKey.addresses && vout.scriptPubKey.addresses.length === 1)
-    .forEach(vout => {
-      let oldBalance = addressToDelta.get(vout.scriptPubKey.addresses[0]);
-      if (!oldBalance) oldBalance = 0;
-      addressToDelta.set(vout.scriptPubKey.addresses[0], oldBalance+JSONtoAmount(vout.value));
-    });
-    return addressToDelta;
-  }
 
   private async addressBalanceChangesToClusterBalanceChanges(addressToDelta: Map<string, number>): Promise<Map<number, number>> {
     let promises = [];
@@ -90,30 +73,7 @@ export class BlockImportService {
     return clusterToDelta;
   }
   
-  private txAddressesToCluster(tx: Transaction): Set<string> {
-    let result = new Set<string>();
-    if (this.isMixingTx(tx)) return result;
-    tx.vin.map(vin => vin.address).filter(address => address !== undefined).forEach(address => result.add(address));
-    return result;
-  }
-  
-  private txAddresses(tx: Transaction): Set<string> {
-    let result = new Set<string>();
-    tx.vin.map(vin => vin.address).filter(address => address !== undefined).forEach(address => result.add(address));
-    tx.vout.filter(vout => vout.scriptPubKey.addresses && vout.scriptPubKey.addresses.length === 1 && vout.scriptPubKey.addresses[0])
-    .map(vout => vout.scriptPubKey.addresses[0]).forEach(address => result.add(address));
-    return result;
-  }
 
-  private isMixingTx(tx: Transaction) {
-    if (tx.vin.length < 2) return false;
-    if (tx.vout.length !== tx.vin.length) return false;
-    let firstInput = tx.vin[0];
-    if (typeof firstInput.value !== 'number') return false;
-    if (!tx.vin.every(vin => vin.value === firstInput.value)) return false;
-    if (!tx.vout.every(vout => vout.value === firstInput.value)) return false;
-    return true;
-  }
   
   private async getAddressClusterInfo(address: string): Promise<{address: string, clusterId?: number}> {
     try {
@@ -171,20 +131,20 @@ export class BlockImportService {
     let txToAddressesNotToCluster: Map<number, Set<string>> = new Map();
     let txToAddressesToCluster: Map<number, Set<string>> = new Map();
     for (const [index, tx] of txs.entries()) {
-      let txAddresses = this.txAddresses(tx);
-      if (txAddresses.size > 0) txToAddress.set(index, new Set());
-      txAddresses.forEach(address => {
+      let txAddr = txAddresses(tx);
+      if (txAddr.size > 0) txToAddress.set(index, new Set());
+      txAddr.forEach(address => {
         allAddresses.add(address);
         txToAddress.get(index).add(address);
       });
 
-      let addressesToCluster = this.txAddressesToCluster(tx);
+      let addressesToCluster = txAddressesToCluster(tx);
       if (addressesToCluster.size > 0) txToAddressesToCluster.set(index, new Set());
       addressesToCluster.forEach(address => {
         txToAddressesToCluster.get(index).add(address);
       });
       
-      txAddresses.forEach(address => {
+      txAddr.forEach(address => {
         if (!addressesToCluster.has(address)) {
           if (!txToAddressesNotToCluster.has(index)) txToAddressesNotToCluster.set(index, new Set());
           txToAddressesNotToCluster.get(index).add(address);
@@ -265,8 +225,8 @@ export class BlockImportService {
     if (block.height <= await this.getLastSavedTxHeight()) return [];//already saved
     let blockAddresses: Set<string> = new Set();
     for (let tx of block.tx) {
-      let txAddresses = this.txAddresses(tx);
-      txAddresses.forEach(txAddress => blockAddresses.add(txAddress));
+      let txAddr = txAddresses(tx);
+      txAddr.forEach(txAddress => blockAddresses.add(txAddress));
     }
     let blockAddressesArray = Array.from(blockAddresses);
     let blockClusterPromises: Promise<{clusterId: number}>[] = [];
@@ -306,7 +266,7 @@ export class BlockImportService {
     });
     let ops: AbstractBatch<Buffer, Buffer>[] = [];
     for (const [txN, tx] of block.tx.entries()) {
-      let addressBalanceChanges = this.getTransactionAddressBalanceChanges(tx);
+      let addressBalanceChanges = txAddressBalanceChanges(tx);
       let clusterIdToDelta: Map<number, number> = new Map();
       addressBalanceChanges.forEach((delta: number, address: string) => {
         if (address === undefined) throw new Error("undefined address");

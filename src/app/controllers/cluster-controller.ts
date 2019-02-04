@@ -1,9 +1,13 @@
 import { Request, Response } from 'express';
+import { Transaction } from '../models/transaction';
 import { AddressEncodingService } from '../services/address-encoding-service';
 import { BinaryDB } from '../services/binary-db';
 import { ClusterAddressService } from '../services/cluster-address-service';
 import { ClusterTransactionService } from '../services/cluster-transaction-service';
+import { AddressClusterTable } from '../tables/address-cluster-table';
 import { BalanceToClusterTable } from '../tables/balance-to-cluster-table';
+import RpcApi from '../utils/rpc-api';
+import { txAddressBalanceChanges } from '../utils/utils';
 
 
 export class ClusterController {
@@ -11,11 +15,13 @@ export class ClusterController {
   private clusterTransactionService: ClusterTransactionService;
   private clusterAddressService: ClusterAddressService;
   private balanceToClusterTable: BalanceToClusterTable;
+  private addressClusterTable: AddressClusterTable;
 
-  constructor(private db: BinaryDB, addressEncodingService: AddressEncodingService) {
+  constructor(private db: BinaryDB, addressEncodingService: AddressEncodingService, private rpcApi: RpcApi) {
     this.clusterTransactionService = new ClusterTransactionService(db);
     this.clusterAddressService = new ClusterAddressService(db, addressEncodingService);
     this.balanceToClusterTable = new BalanceToClusterTable(db);
+    this.addressClusterTable = new AddressClusterTable(db, addressEncodingService);
   }  
 
   clusterTransactions = async (req:Request, res:Response) => {
@@ -29,6 +35,61 @@ export class ClusterController {
     let result = await this.clusterAddressService.getClusterAddresses(clusterId);
     res.send(result);
   };
+
+  private async addressBalanceChangesToClusterBalanceChanges(addressToDelta: Map<string, number>): Promise<Map<number, number>> {
+    let promises = [];
+    let addresses = [];
+    addressToDelta.forEach((delta: number, address: string) => {
+      addresses.push(address);
+      promises.push(this.addressClusterTable.get({address: address}));
+      //promises.push(this.db.get(db_address_cluster_prefix+address));
+    });
+    let clusterIds = await Promise.all(promises);
+    let clusterToDelta = new Map<number, number>();
+    addresses.forEach((address: string, index: number) => {
+      let clusterId: number = clusterIds[index].clusterId;
+      if (clusterId === undefined) throw Error("Cluster missing");
+      let oldBalance = clusterToDelta.get(clusterId);
+      let addressDelta = addressToDelta.get(address);
+      if (!oldBalance) oldBalance = 0;
+      clusterToDelta.set(clusterId, oldBalance+addressDelta);
+    });
+    return clusterToDelta;
+  }
+
+  txClusterBalnaceChanges = async (req:Request, res:Response) => {
+    let txid: string = req.params.txid;
+    let tx: Transaction = (await this.rpcApi.getTransactions([txid]))[0];
+    let txids: Set<string> = new Set();
+    tx.vin.forEach(vin => {
+      if (vin.coinbase) return;
+      if (!vin.address) {
+        txids.add(vin.txid);
+      }
+    });
+    let txs = await this.rpcApi.getTransactions(Array.from(txids));
+    let txidToTx: Map<string, Transaction> = new Map();
+    txs.forEach(tx => txidToTx.set(tx.txid, tx));
+    tx.vin.forEach(vin => {
+      if (vin.coinbase) return;
+      if (!vin.address) {
+        let vout = txidToTx.get(vin.txid).vout[vin.vout];
+        if (vout.scriptPubKey.addresses.length === 1) {
+          vin.address = vout.scriptPubKey.addresses[0];
+        }
+        vin.value = vout.value;
+      }
+    });
+    let balanceChanges: Map<string, number> = txAddressBalanceChanges(tx);
+
+    let clusterBalanceChanges = await this.addressBalanceChangesToClusterBalanceChanges(balanceChanges);
+    //console.log("clusterBalanceChanges", clusterBalanceChanges);
+    let result = {};
+    clusterBalanceChanges.forEach((delta: number, clusterId: number) => {
+      result[clusterId] = delta;
+    });
+    res.send(result);
+  }  
 
 
   largestClusters = async (req:Request, res:Response) => {

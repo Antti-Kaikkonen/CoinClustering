@@ -12,7 +12,7 @@ import { BinaryDB } from "./binary-db";
 
 let _outputCacheTable: OutputCacheTable;
 let _restApi: RestApi;
-let _rpcApi: RpcApi;// = new RpcApi(config.host, config.port, config.user, config.pass);
+let _rpcApi: RpcApi;
 let _db: BinaryDB;
 
 

@@ -57,7 +57,6 @@ export class BlockImportService {
     addressToDelta.forEach((delta: number, address: string) => {
       addresses.push(address);
       promises.push(this.addressClusterTable.get({address: address}));
-      //promises.push(this.db.get(db_address_cluster_prefix+address));
     });
     let clusterIds = await Promise.all(promises);
     let clusterToDelta = new Map<number, number>();
@@ -84,15 +83,12 @@ export class BlockImportService {
   }
 
   async processClusters(clusters: Cluster[], lastBlockHeight: number) {
-    //console.log("lastblockheight", lastBlockHeight);
-    //let ops: AbstractBatch<Buffer, Buffer>[] = [];
     let promises: Promise<any>[] = [];
     for (let cluster of clusters) {
       let clusterIds: number[] = cluster.clusterIdsSorted();
       let clusterAddresses: string[] = Array.from(cluster.addresses);
       if (clusterIds.length === 0) {
         await this.clusterAddressService.createAddressClustersOps(clusterAddresses, await this.getNextClusterId());
-        //promises.push(this.clusterAddressService.createAddressClustersOps(clusterAddresses, await this.getNextClusterId()));
         this.nextClusterId++;
       } else {
         let toClusterId = clusterIds[0];
@@ -101,7 +97,6 @@ export class BlockImportService {
           console.log(lastBlockHeight.toString(),"merging to",toClusterId,"from",fromClusters.join(","));
           promises.push(this.clusterAddressService.mergeClusterAddressesOps(toClusterId, fromClusters, clusterAddresses));
           if (fromClusters.length > 0 && await this.getLastSavedTxHeight() > -1) promises.push(this.clusterTransactionService.mergeClusterTransactionsOps(toClusterId, ...fromClusters));
-          //fromClusters.forEach(fromClusterId => {
           for (const fromClusterId of fromClusters) {  
             await this.db.writeBatchService.push(
               this.clusterMergedToTable.putOperation({fromClusterId: fromClusterId}, {toClusterId: toClusterId})
@@ -109,12 +104,8 @@ export class BlockImportService {
           };
         }
       }  
-    }  
-    //console.log("await promises");
+    }
     await Promise.all(promises);
-    //console.log("await promises 2");
-    //let v = await Promise.all(promises);
-    //v.forEach(opGroup => opGroup.forEach(op => ops.push(op)));
 
     await this.db.writeBatchService.push(
       this.lastMergedHeightTable.putOperation(undefined, {height:lastBlockHeight})
@@ -123,9 +114,6 @@ export class BlockImportService {
       this.nextClusterIdTable.putOperation(undefined, {nextClusterId: await this.getNextClusterId()})
     );
 
-    //if (ops.length > 1000) console.log("ops.length: ", ops.length);
-    //await this.db.batchBinary(ops);
-    //console.log("commit!");
     await this.db.writeBatchService.commit();
   }
 
@@ -190,7 +178,7 @@ export class BlockImportService {
       let txAddresses = txToAddressesNotToCluster.get(i);
       if (txAddresses === undefined) continue;
       txAddresses.forEach(address => {
-        if (addressToClusterId.has(address)) return;//address already in a cluster. If the cluster should be combined then it is already in newClusters
+        if (addressToClusterId.has(address)) return;
         let clusterContainingAddress = newClusters.find(cluster => cluster.addresses.has(address));
         if (clusterContainingAddress !== undefined) {
         } else {
@@ -274,7 +262,6 @@ export class BlockImportService {
       clusterIdToBalance.set(clusterId, balance);
       clusterIdToOldBalance.set(clusterId, balance);
     });
-    //let ops: AbstractBatch<Buffer, Buffer>[] = [];
     for (const [txN, tx] of block.tx.entries()) {
       let addressBalanceChanges = txAddressBalanceChanges(tx);
       let clusterIdToDelta: Map<number, number> = new Map();
@@ -286,7 +273,6 @@ export class BlockImportService {
         if (oldDelta === undefined) oldDelta = 0;
         clusterIdToDelta.set(clusterId, oldDelta+delta);
       });
-      //clusterIdToDelta.forEach((delta: number, clusterId: number) => {
       for (const [clusterId, delta] of clusterIdToDelta) {
         let txCount = clusterIdToTxCount.get(clusterId);
         txCount++;
@@ -299,11 +285,9 @@ export class BlockImportService {
         );
       };
     }
-    //clusterIdToTxCount.forEach((txCount: number, clusterId: number) => {
     for (const [clusterId, txCount] of clusterIdToTxCount) {
       await this.db.writeBatchService.push(this.clusterBalanceCountTable.putOperation({clusterId: clusterId}, {balanceCount: txCount}));
     };
-    //clusterIdToBalance.forEach((balance: number, clusterId: number) => {
     for (const [clusterId, balance] of clusterIdToBalance) {
       let oldBalance = clusterIdToOldBalance.get(clusterId);
       let balanceExists = clusterIdToOldTxCount.get(clusterId) > 0;
@@ -319,8 +303,6 @@ export class BlockImportService {
     );
     
     this.lastSavedTxHeight = block.height;
-    //await this.db.batchBinary(ops);
-    //return ops;
     await this.db.writeBatchService.commit();
   }  
 
@@ -378,9 +360,6 @@ export class BlockImportService {
       this.lastMergedHeight = block.height;
     }
     if (block.height >= await this.getLastSavedTxHeight()) {
-      //await this.saveBlockTransactions(block);
-      //let ops = await this.saveBlockTransactionsAsync(block);
-      //await this.db.batchBinary(ops);
       await this.saveBlockTransactionsAsync(block);
     }
   }

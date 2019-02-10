@@ -49,12 +49,6 @@ export class WriteBatchService {
     return ops;
   }
 
-  /*push(op: AbstractBatch): void {
-    Promise.all(this.pushPromises).then(() => {
-      this.pushPromises.push(this.pushAsync(op));
-    });
-  }*/
-
  async push(op: AbstractBatch): Promise<void> {
     this.ops.push(op);
     if (this.ops.length >= BATCH_SIZE) {
@@ -75,7 +69,6 @@ export class WriteBatchService {
     let ops: AbstractBatch<Buffer, Buffer>[] = [];
     let writer = new Writable({
       objectMode: true,
-      //highWaterMark: 256,
       write: async (row: 
       { 
         key: {key: Buffer}, 

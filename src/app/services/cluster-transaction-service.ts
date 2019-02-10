@@ -128,7 +128,6 @@ export class ClusterTransactionService {
         lt: {clusterId: clusterId+1}
       });
       rs.on("data", function(data) {
-        //console.log("")
         let cb = new ClusterTransaction(
           data.value.txid,
           data.value.balanceDelta,
@@ -178,8 +177,7 @@ export class ClusterTransactionService {
   }
 
   async mergeClusterTransactionsOps(toCluster: number, ...fromClusters: number[]): Promise<void> {
-    //let ops: AbstractBatch<Buffer, Buffer>[] = [];
-    if (fromClusters.length === 0) return;// ops;
+    if (fromClusters.length === 0) return;
     let transactionsFromPromises = [];
     let balancesFromPromises = [];
     fromClusters.forEach(fromCluster => {
@@ -241,7 +239,6 @@ export class ClusterTransactionService {
       });
     });
     await allTransactionsMerged;
-    //txidToTransaction.forEach((tx: ClusterTransaction, txid: string) => {
     for (const [txid, tx] of txidToTransaction) {
       await this.db.writeBatchService.push(this.clusterTransactionTable.putOperation({clusterId: toCluster, height: tx.height, n: tx.n}, {txid: tx.txid, balanceDelta: tx.balanceDelta}));
     };
@@ -262,13 +259,11 @@ export class ClusterTransactionService {
         this.clusterBalanceTable.putOperation({clusterId: toCluster}, {balance: newBalance})
       );
     }
-    //return ops;
   }
 
   async mergeClusterTransactions(toCluster: number, ...fromClusters: number[]) {
     await this.mergeClusterTransactionsOps(toCluster, ...fromClusters);
     await this.db.writeBatchService.commit();
-    //return this.db.batchBinary(await this.mergeClusterTransactionsOps(toCluster, ...fromClusters));
   }
 
 }

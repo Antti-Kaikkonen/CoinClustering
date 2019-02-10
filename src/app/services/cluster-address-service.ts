@@ -1,4 +1,3 @@
-import { AbstractBatch } from 'abstract-leveldown';
 import { AddressClusterTable } from '../tables/address-cluster-table';
 import { ClusterAddressCountTable } from '../tables/cluster-address-count-table';
 import { ClusterAddressTable } from '../tables/cluster-address-table';
@@ -15,12 +14,14 @@ export class ClusterAddressService {
   clusterAddressCountTable: ClusterAddressCountTable;
   nextClusterIdTable: NextClusterIdTable;
   addressClusterTable: AddressClusterTable;
+  //writeBatchService: WriteBatchService;
 
   constructor(private db: BinaryDB, addressEncodingService: AddressEncodingService) {
     this.clusterAddressTable = new ClusterAddressTable(db, addressEncodingService);
     this.clusterAddressCountTable = new ClusterAddressCountTable(db);
     this.nextClusterIdTable = new NextClusterIdTable(db);
     this.addressClusterTable = new AddressClusterTable(db, addressEncodingService);
+    //this.writeBatchService = new WriteBatchService(db);
   }  
 
   async getAddressCluster(address: string): Promise<number> {
@@ -49,9 +50,9 @@ export class ClusterAddressService {
     });
   }
 
-  async mergeClusterAddressesOps(toClusterId: number, fromClusterIds: number[], nonClusterAddresses?: string[]): Promise<AbstractBatch<Buffer, Buffer>[]> {
-    let ops: AbstractBatch<Buffer, Buffer>[] = [];
-    if (fromClusterIds.length === 0 && (nonClusterAddresses === undefined || nonClusterAddresses.length === 0)) return ops;
+  async mergeClusterAddressesOps(toClusterId: number, fromClusterIds: number[], nonClusterAddresses?: string[]): Promise<void> {//: Promise<AbstractBatch<Buffer, Buffer>[]> {
+    //let ops: AbstractBatch<Buffer, Buffer>[] = [];
+    if (fromClusterIds.length === 0 && (nonClusterAddresses === undefined || nonClusterAddresses.length === 0)) return;// [];// ops;
     let promises: Promise<any>[] = [];
     promises.push(this.clusterAddressCountTable.get({clusterId: toClusterId}));
 
@@ -62,73 +63,87 @@ export class ClusterAddressService {
     let values = await Promise.all(promises);
     let nextIndex = values[0].addressCount;
 
-    fromClusterIds.forEach((fromClusterId: number, index: number) => {
-      let addresses: string[] = values[1+index];
-      addresses.forEach((address: string, index: number) => {
-        ops.push(
+    for (let clusterIndex = 0; clusterIndex < fromClusterIds.length; clusterIndex++) {
+      let fromClusterId = fromClusterIds[clusterIndex];
+    //fromClusterIds.forEach((fromClusterId: number, index: number) => {
+      let addresses: string[] = values[1+clusterIndex];
+      for (let addressIndex = 0; addressIndex < addresses.length; addressIndex++) {
+        let address = addresses[addressIndex];
+      //addresses.forEach((address: string, index: number) => {
+        await this.db.writeBatchService.push(
           this.clusterAddressTable.putOperation({clusterId: toClusterId, addressIndex: nextIndex}, {address: address})
         );
-        ops.push(
-          this.clusterAddressTable.delOperation({clusterId: fromClusterId, addressIndex: index})
+        await this.db.writeBatchService.push(
+          this.clusterAddressTable.delOperation({clusterId: fromClusterId, addressIndex: addressIndex})
         );
-        ops.push(
+        await this.db.writeBatchService.push(
           this.addressClusterTable.putOperation({address: address}, {clusterId: toClusterId})
         );
         nextIndex++;
-      });
-      ops.push(
+      };
+      await this.db.writeBatchService.push(
         this.clusterAddressCountTable.delOperation({clusterId: fromClusterId})
       );
-    });
+    };
     if (nonClusterAddresses !== undefined && nonClusterAddresses.length > 0) {
-      let addAddressesOps = await this.addAddressesToClusterOps(nonClusterAddresses, toClusterId, nextIndex);
-      addAddressesOps.forEach(op => ops.push(op));
+      //let addAddressesOps = await this.addAddressesToClusterOps(nonClusterAddresses, toClusterId, nextIndex);
+      await this.addAddressesToClusterOps(nonClusterAddresses, toClusterId, nextIndex);
+      //addAddressesOps.forEach(op => this.db.writeBatchService.push(op));
       nextIndex += nonClusterAddresses.length;
     }
-    ops.push(
+    await this.db.writeBatchService.push(
       this.clusterAddressCountTable.putOperation({clusterId: toClusterId}, {addressCount: nextIndex})
     );
-    return ops;
+    //await this.db.writeBatchService.commit();
+    //return [];
+    //return ops;
   }
 
   async mergeClusterAddresses(toClusterId: number, ...fromClusterIds: number[]) {
-    return this.db.batchBinary(await this.mergeClusterAddressesOps(toClusterId, fromClusterIds));
+    await this.mergeClusterAddressesOps(toClusterId, fromClusterIds);
+    await this.db.writeBatchService.commit();
+    //return this.db.batchBinary(await this.mergeClusterAddressesOps(toClusterId, fromClusterIds));
   }
 
-  async addAddressesToClusterOps(addresses: string[], clusterId: number, oldClusterAddressCount?: number): Promise<AbstractBatch<Buffer, Buffer>[]> {
-    let ops: AbstractBatch<Buffer, Buffer>[] = [];
+  async addAddressesToClusterOps(addresses: string[], clusterId: number, oldClusterAddressCount?: number): Promise<void> {//: Promise<AbstractBatch<Buffer, Buffer>[]> {
+    //let ops: AbstractBatch<Buffer, Buffer>[] = [];
     if (oldClusterAddressCount === undefined) {
       oldClusterAddressCount = (await this.clusterAddressCountTable.get({clusterId: clusterId})).addressCount;
     }
-    addresses.forEach((address, index) => {
+    //addresses.forEach((address, index) => {
+    for (const [index, address] of addresses.entries()) {
       let newIndex: number = Number(oldClusterAddressCount)+index;
-      ops.push(this.clusterAddressTable.putOperation({clusterId: clusterId, addressIndex: newIndex}, {address: address}));
-      ops.push(this.addressClusterTable.putOperation({address: address}, {clusterId: clusterId}));
-    });
-    return ops;
+      await this.db.writeBatchService.push(this.clusterAddressTable.putOperation({clusterId: clusterId, addressIndex: newIndex}, {address: address}));
+      await this.db.writeBatchService.push(this.addressClusterTable.putOperation({address: address}, {clusterId: clusterId}));
+    };
+    //return ops;
   }
 
   async addAddressesToCluster(addresses: string[], clusterId: number): Promise<void> {
-    return this.db.batchBinary(await this.addAddressesToClusterOps(addresses, clusterId));
+    await this.addAddressesToClusterOps(addresses, clusterId)
+    return this.db.writeBatchService.commit();
+    //return this.db.batchBinary(await this.addAddressesToClusterOps(addresses, clusterId));
   }
 
-  async createAddressClustersOps(clusterAddresses: string[], clusterId: number): Promise<AbstractBatch<Buffer, Buffer>[]> {
-    let ops: AbstractBatch<Buffer, Buffer>[] = [];
+  async createAddressClustersOps(clusterAddresses: string[], clusterId: number): Promise<void> {//: Promise<AbstractBatch<Buffer, Buffer>[]> {
+    //let ops: AbstractBatch<Buffer, Buffer>[] = [];
     if (clusterAddresses.length === 0) throw new Error("createAddressClustersOps called with 0 addresses");
-    ops.push(
+    await this.db.writeBatchService.push(
       this.clusterAddressCountTable.putOperation({clusterId: clusterId}, {addressCount: clusterAddresses.length})
     );
-    clusterAddresses.forEach((address: string, index: number) => {
-      ops.push(
+    //clusterAddresses.forEach((address: string, index: number) => {
+    for (const [index, address] of clusterAddresses.entries()) {
+      await this.db.writeBatchService.push(
         this.clusterAddressTable.putOperation({clusterId, addressIndex: index}, {address: address})
       );
-      ops.push(
+      await this.db.writeBatchService.push(
         this.addressClusterTable.putOperation({address: address}, {clusterId: clusterId})
       );
-    });
-    return ops;
+    };
+    //return ops;
   }  
 
+  /*
   async createMultipleAddressClusters(clusters: Array<string[]>, next_cluster_id?: number) {
     if (next_cluster_id === undefined) {
       try {
@@ -137,18 +152,19 @@ export class ClusterAddressService {
         next_cluster_id = 0;
       }
     }
-    let ops: AbstractBatch<Buffer, Buffer>[] = [];
+    //let ops: AbstractBatch<Buffer, Buffer>[] = [];
     for (let clusterAddresses of clusters) {
-      let newOps = await this.createAddressClustersOps(clusterAddresses, next_cluster_id);
-      newOps.forEach(op => ops.push(op));
+      await this.createAddressClustersOps(clusterAddresses, next_cluster_id);
+      //newOps.forEach(op => this.db.writeBatchService.push(op));
       next_cluster_id++;
     }
-    ops.push(this.nextClusterIdTable.putOperation(undefined, {nextClusterId: next_cluster_id}));
-    return this.db.batchBinary(ops);
+    this.db.writeBatchService.push(this.nextClusterIdTable.putOperation(undefined, {nextClusterId: next_cluster_id}));
+    return this.db.writeBatchService.commit();
+    //return this.db.batchBinary(ops);
   }
 
   async createClusterWithAddresses(addresses: string[]): Promise<void> {
     return this.createMultipleAddressClusters([addresses]);
-  }
+  }*/
 
 }  

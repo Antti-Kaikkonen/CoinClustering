@@ -8,7 +8,7 @@ export class LastSavedTxHeightTable extends PrefixTable<undefined, { height: num
 
   keyencoding = {
     encode: (a): Buffer => {
-        return Buffer.from([]);
+        return Buffer.alloc(0);
     },
     decode: (buf: Buffer) => {
       return undefined

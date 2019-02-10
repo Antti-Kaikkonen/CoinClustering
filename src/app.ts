@@ -75,10 +75,12 @@ async function deleteBlockInputs(block: BlockWithTransactions) {
 const stay_behind_blocks = 100;
 
 async function doProcessing() {
+  await db.writeBatchService.process();
   let height = await rpcApi.getRpcHeight();
   console.log("rpc height", height);
   let lastMergedHeight: number = await blockImportService.getLastMergedHeight();
   let lastSavedTxHeight: number = await blockImportService.getLastSavedTxHeight();
+  console.log("last saved tx height", lastSavedTxHeight);
   let blockWriter: Writable;
   let startHeight: number;
   let toHeight: number;

@@ -32,3 +32,7 @@ export const db_balace_to_cluster_prefix = "p";//
 export const db_output_prefix = "q";//
 
 export const db_cluster_balance_prefix = "r";
+
+export const db_write_batch_state_prefix = "s";
+
+export const db_Write_batch_prefix = "t";

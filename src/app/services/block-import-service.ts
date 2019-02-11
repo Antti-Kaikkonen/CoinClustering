@@ -215,6 +215,14 @@ export class BlockImportService {
   }
 
 
+  async getClusterBalanceAndTxCount(clusterId: number): Promise<{balance: number, txCount: number}> {
+    let promises = [];
+    promises.push(this.clusterTransactionService.getClusterBalance(clusterId));
+    promises.push(this.clusterTransactionService.getTransactionCount(clusterId));
+    let res = await Promise.all(promises);
+    return {balance: res[0], txCount: res[1]};
+  }
+
   async saveBlockTransactionsAsync(block: BlockWithTransactions): Promise<void> {
     console.log(block.height, "saving transactions");
     if (block.height <= await this.getLastSavedTxHeight()) {
@@ -227,41 +235,41 @@ export class BlockImportService {
       txAddr.forEach(txAddress => blockAddresses.add(txAddress));
     }
     let blockAddressesArray = Array.from(blockAddresses);
-    let blockClusterPromises: Promise<{clusterId: number}>[] = [];
-    
-    blockAddressesArray.forEach(address => {
-      let clusterIdPromise: Promise<{clusterId: number}> = this.addressClusterTable.get({address: address});
-      blockClusterPromises.push(clusterIdPromise);
-    });
 
-
-    let clusterIds: number[] = (await Promise.all(blockClusterPromises)).map(clusterId => clusterId.clusterId);
     let addressToClusterId: Map<string, number> = new Map();
-    clusterIds.forEach((clusterId: number, index: number) => {
-      if (clusterId === undefined) throw new Error("undefined clusterid 1");
-      let address = blockAddressesArray[index];
-      addressToClusterId.set(address, clusterId);
+
+    let clusterIdToBalanceAndTxCountPromise: Map<number, Promise<{balance: number, txCount: number}>> = new Map();
+    let allAddressesResolved: Promise<void> = new Promise((resolve, reject) => {
+      let addressesToReolve: number = blockAddressesArray.length;
+      blockAddressesArray.forEach(address => {
+        let addressToClusterIdPromise: Promise<{clusterId: number}> = this.addressClusterTable.get({address: address});
+        addressToClusterIdPromise.then((res: {clusterId: number}) => {
+          let clusterId = res.clusterId;
+          addressToClusterId.set(address, clusterId);
+          if (!clusterIdToBalanceAndTxCountPromise.has(clusterId)) {
+            clusterIdToBalanceAndTxCountPromise.set(clusterId, this.getClusterBalanceAndTxCount(clusterId));
+          }
+          addressesToReolve--;
+          if (addressesToReolve === 0) resolve();
+        });
+      });
     });
-    let clusterTransactionCountPromises: Promise<number>[] = [];
-    let clusterBalancePromises: Promise<number>[] = [];
-    clusterIds.forEach((clusterId: number) => {
-      clusterBalancePromises.push(this.clusterTransactionService.getClusterBalance(clusterId));
-      clusterTransactionCountPromises.push(this.clusterTransactionService.getTransactionCount(clusterId));
-    });
-    let clusterTransactionCounts = await Promise.all(clusterTransactionCountPromises);
-    let clusterBalances = await Promise.all(clusterBalancePromises);
+    await allAddressesResolved;
+
     let clusterIdToBalance: Map<number, number> = new Map();
     let clusterIdToOldBalance: Map<number, number> = new Map();
     let clusterIdToTxCount: Map<number, number> = new Map();
     let clusterIdToOldTxCount: Map<number, number> = new Map();
-    clusterIds.forEach((clusterId: number, index: number) => {
-      let txCount = clusterTransactionCounts[index];
-      let balance = clusterBalances[index];
+
+    for (let clusterId of clusterIdToBalanceAndTxCountPromise.keys()) {
+      let balanceAndTxCount: {balance: number, txCount: number} = await clusterIdToBalanceAndTxCountPromise.get(clusterId);
+      let txCount = balanceAndTxCount.txCount;
+      let balance = balanceAndTxCount.balance;
       clusterIdToTxCount.set(clusterId, txCount);
       clusterIdToOldTxCount.set(clusterId, txCount);
       clusterIdToBalance.set(clusterId, balance);
       clusterIdToOldBalance.set(clusterId, balance);
-    });
+    };
     for (const [txN, tx] of block.tx.entries()) {
       let addressBalanceChanges = txAddressBalanceChanges(tx);
       let clusterIdToDelta: Map<number, number> = new Map();

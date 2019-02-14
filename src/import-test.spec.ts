@@ -1,8 +1,7 @@
-import RpcClient from 'bitcoind-rpc';
 import { expect } from 'chai';
 import EncodingDown from 'encoding-down';
-import LevelDOWN from 'leveldown';
 import 'mocha';
+import rocksDB from 'rocksdb';
 import { BlockWithTransactions } from './app/models/block';
 import { AddressEncodingService } from './app/services/address-encoding-service';
 import { BinaryDB } from './app/services/binary-db';
@@ -22,16 +21,14 @@ describe('Save a blocks with 3 transactions', () => {
   let clusterAddressService: ClusterAddressService;
   let clusterTransactionService: ClusterTransactionService;
 
-  var rpc = new RpcClient(undefined);
-
   let blockImportService: BlockImportService;
   before(async () => {
     await new Promise((resolve, reject) => {
-      LevelDOWN['destroy'](dbpath, () => {
+      rocksDB['destroy'](dbpath, () => {
         resolve();
       });
     });
-    db = new BinaryDB(EncodingDown<Buffer, Buffer>(LevelDOWN(dbpath), {keyEncoding: 'binary', valueEncoding: 'binary'}), {errorIfExists: true});
+    db = new BinaryDB(EncodingDown<Buffer, Buffer>(rocksDB(dbpath), {keyEncoding: 'binary', valueEncoding: 'binary'}), {errorIfExists: true});
     clusterAddressService = new ClusterAddressService(db, addressEncodingService);
     clusterTransactionService = new ClusterTransactionService(db);
     blockImportService = new BlockImportService(db, clusterAddressService, clusterTransactionService, addressEncodingService);

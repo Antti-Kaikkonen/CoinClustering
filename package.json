@@ -1,6 +1,6 @@
 {
   "name": "coin-clustering",
-  "version": "0.0.17",
+  "version": "0.0.18",
   "description": "Address clustering for bitcoin based cryptocurrencies",
   "scripts": {
     "start": "ts-node src/app.ts",
@@ -18,10 +18,10 @@
     "cors": "^2.8.5",
     "encoding-down": "^5.0.4",
     "express": "^4.16.4",
-    "leveldown": "^4.0.1",
     "levelup": "^3.1.1",
     "lexint": "^1.0.0",
-    "lru-cache": "^5.1.1"
+    "lru-cache": "^5.1.1",
+    "rocksdb": "^3.0.3"
   },
   "devDependencies": {
     "@types/abstract-leveldown": "^5.0.1",

@@ -5,7 +5,6 @@ import { ClusterTransactionCountTable } from '../tables/cluster-transaction-coun
 import { ClusterTransactionTable } from '../tables/cluster-transaction-table';
 import { LastSavedTxNTable } from '../tables/last-saved-tx-n-table';
 import { BinaryDB } from './binary-db';
-import { db_value_separator } from './db-constants';
 
 export class ClusterTransactionService {
   
@@ -145,35 +144,6 @@ export class ClusterTransactionService {
         resolve(transactions);
       });
     });
-  }
-
-  private cluster_balance_value(txid: string, balance: number, height: number, n: number) {
-    return txid+db_value_separator+balance+db_value_separator+height+db_value_separator+n;
-  }
-  
-  private cluster_tx_balance_value(index: number, balance: number, height: number, n: number) {
-    return index+db_value_separator+balance+db_value_separator+height+db_value_separator+n;
-  }
-
-  private sortAndRemoveDuplicates(arr: any[]) {
-    arr.sort((a, b) => {
-      if (a.height === b.height && a.n === b.n) {
-        return 0;
-      } else if (a.height < b.height || (a.height === b.height && a.n < b.n)) {
-        return -1;
-      } else {
-        return 1;
-      }
-    });
-    let i = 1;
-    while (i < arr.length) {//remove duplicates
-      if (arr[i].height === arr[i-1].height && arr[i].n === arr[i-1].n) {
-        arr[i-1].delta = arr[i-1].delta+arr[i].delta;
-        arr.splice(i, 1);
-      } else {
-        i++;
-      }
-    }
   }
 
   async mergeClusterTransactionsOps(toCluster: number, ...fromClusters: number[]): Promise<void> {

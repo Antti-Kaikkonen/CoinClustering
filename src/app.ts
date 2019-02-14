@@ -1,7 +1,7 @@
 import cors from 'cors';
 import EncodingDown from 'encoding-down';
 import express from 'express';
-import LevelDOWN from 'leveldown';
+import rocksDB from 'rocksdb';
 import { Writable } from 'stream';
 import { ClusterController } from './app/controllers/cluster-controller';
 import { BlockWithTransactions } from './app/models/block';
@@ -29,14 +29,14 @@ let addressEncodingService = new AddressEncodingService(config.pubkeyhash, confi
 
 
 //var rpc = new RpcClient(config);
-let leveldown = LevelDOWN(cwd+'/db');
+let rocksdb = rocksDB(cwd+'/rocksdb');
 
 let restApi = new RestApi(config.host, config.port);
 let rpcApi = new RpcApi(config.host, config.port, config.user, config.pass);
 
-let db = new BinaryDB(EncodingDown<Buffer, Buffer>(leveldown, {keyEncoding: 'binary', valueEncoding: 'binary'}), {
-  writeBufferSize: 8 * 1024 * 1024,
-  cacheSize: 300 * 1024 * 1024,
+let db = new BinaryDB(EncodingDown<Buffer, Buffer>(rocksdb, {keyEncoding: 'binary', valueEncoding: 'binary'}), {
+  writeBufferSize: 16 * 1024 * 1024,
+  cacheSize: config.dbcache * 1024 * 1024,
   compression: true
 });
 

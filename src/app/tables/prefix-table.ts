@@ -10,7 +10,7 @@ export abstract class PrefixTable<K, V> implements Table<K, V> {
   constructor(private db: BinaryDB) {
   }
 
-  abstract prefix: string;
+  abstract prefix: Buffer;
   //private prefixBuffer = Buffer.from(this.prefix);
 
   abstract keyencoding: EncodeDecode<K>;
@@ -18,7 +18,8 @@ export abstract class PrefixTable<K, V> implements Table<K, V> {
   abstract  valueencoding: EncodeDecode<V>;
 
   private prefixAsBuffer(): Buffer {
-    return Buffer.from(this.prefix);
+    return this.prefix;
+    //return Buffer.from(this.prefix);
   }
 
   putOperation(key: K, value: V): AbstractBatch<Buffer, Buffer> {

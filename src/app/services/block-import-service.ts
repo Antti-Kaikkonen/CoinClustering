@@ -1,3 +1,4 @@
+import { ClusterBuilder } from "../misc/cluster-builder";
 import { BlockWithTransactions } from "../models/block";
 import { Cluster } from "../models/cluster";
 import { AddressClusterTable } from "../tables/address-cluster-table";
@@ -10,7 +11,7 @@ import { LastMergedHeightTable } from "../tables/last-merged-height-table";
 import { LastSavedTxHeightTable } from "../tables/last-saved-tx-height-table";
 import { LastSavedTxNTable } from "../tables/last-saved-tx-n-table";
 import { NextClusterIdTable } from "../tables/next-cluster-id-table";
-import { txAddressBalanceChanges, txAddresses, txAddressesToCluster } from "../utils/utils";
+import { txAddressBalanceChanges, txAddresses } from "../utils/utils";
 import { AddressEncodingService } from "./address-encoding-service";
 import { BinaryDB } from "./binary-db";
 import { ClusterAddressService } from "./cluster-address-service";
@@ -117,100 +118,25 @@ export class BlockImportService {
     await this.db.writeBatchService.commit();
   }
 
-
   private async computeClusters(block: BlockWithTransactions): Promise<Cluster[]> {
-    let txs = block.tx;
-
-    let allAddresses: Set<string> = new Set();
-    let txToAddress: Map<number, Set<string>> = new Map();
-    let txToAddressesNotToCluster: Map<number, Set<string>> = new Map();
-    let txToAddressesToCluster: Map<number, Set<string>> = new Map();
-    for (const [index, tx] of txs.entries()) {
-      let txAddr = txAddresses(tx);
-      if (txAddr.size > 0) txToAddress.set(index, new Set());
-      txAddr.forEach(address => {
-        allAddresses.add(address);
-        txToAddress.get(index).add(address);
-      });
-
-      let addressesToCluster = txAddressesToCluster(tx);
-      if (addressesToCluster.size > 0) txToAddressesToCluster.set(index, new Set());
-      addressesToCluster.forEach(address => {
-        txToAddressesToCluster.get(index).add(address);
-      });
-      
-      txAddr.forEach(address => {
-        if (!addressesToCluster.has(address)) {
-          if (!txToAddressesNotToCluster.has(index)) txToAddressesNotToCluster.set(index, new Set());
-          txToAddressesNotToCluster.get(index).add(address);
-        }
-      });
-    } 
-    let addressToClusterPromises: Promise<{address: string, clusterId?: number}>[] = [];
-    for (let address of allAddresses) {
-      addressToClusterPromises.push(this.getAddressClusterInfo(address));
-    } 
-    let addressesWithClusterInfo = await Promise.all(addressToClusterPromises);
-    let addressToClusterId: Map<string, number> = new Map();
-    addressesWithClusterInfo.forEach(v => {
-      if (v.clusterId === undefined) {
-      } else {
-        addressToClusterId.set(v.address, v.clusterId);
-      }
-    });
-    let newClusters: Cluster[] = [];
-    txToAddressesToCluster.forEach((addresses: Set<string>, txN: number) => {
-      let txCluster: Cluster = new Cluster(); 
-      newClusters.push(txCluster);
-      addresses.forEach(address => {
-        if (addressToClusterId.has(address)) {
-          let clusterId = addressToClusterId.get(address);
-          txCluster.clusterIds.add(clusterId);
-        } else {
-          txCluster.addresses.add(address);
-        }
-      });
-    });
-
-    this.mergeIntersectingClusters(newClusters);
-
-    for (let i = 0; i < txs.length; i++) {
-      let txAddresses = txToAddressesNotToCluster.get(i);
-      if (txAddresses === undefined) continue;
-      txAddresses.forEach(address => {
-        if (addressToClusterId.has(address)) return;
-        let clusterContainingAddress = newClusters.find(cluster => cluster.addresses.has(address));
-        if (clusterContainingAddress !== undefined) {
-        } else {
-          newClusters.push(new Cluster(new Set([address])));
-        }
-      });  
-    }
-    return newClusters;
+    let clusterBuilder = new ClusterBuilder(this.addressClusterTable);
+    block.tx.forEach(tx => clusterBuilder.add(tx));
+    return clusterBuilder.build();
   }
 
-  private mergeIntersectingClusters(clusters: Cluster[]): void {
-    for (let i = 0; i < clusters.length; i++) {
-      let clusterA = clusters[i];
-      let mergedToClusterA;
-      do {
-        mergedToClusterA = false;
-        for (let ii = i+1; ii < clusters.length; ii++) {
-          let clusterB = clusters[ii];
-          if (clusterA.intersectsWith(clusterB)) {
-            clusterA.mergeFrom(clusterB);
-            clusters.splice(ii, 1);
-            mergedToClusterA = true;
-            break;
-          }  
-        }
-      } while (mergedToClusterA);
-    }
-  }
+  processClustersTime = 0;
+  computeClustersTime = 0;
 
   async blockMerging(block: BlockWithTransactions) {
     if (block.height <= await this.getLastMergedHeight()) return;
-    await this.processClusters(await this.computeClusters(block), block.height);
+    let t1 = new Date().getTime()
+    let clusters = await this.computeClusters(block);
+    let t2 = new Date().getTime();
+    await this.processClusters(clusters, block.height);
+    let t3 = new Date().getTime();
+    this.computeClustersTime += t2-t1;
+    this.processClustersTime += t3-t2;
+    console.log("compute:",this.computeClustersTime+", process:",this.processClustersTime);
     this.lastMergedHeight = block.height;
   }
 

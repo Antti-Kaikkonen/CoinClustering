@@ -82,11 +82,12 @@ export class ClusterBuilder {
         clusterIdPromises.push(oldPromise);
       }
     });
-    this.txProcessedPromises.push(
+    let txProcessedPromise = new Promise<void>((resolve, reject) => {
       Promise.all(clusterIdPromises).then(() => {
-        this.txProcessedPromises.push(this.onTxClusterIdsResolved(tx));
+        this.onTxClusterIdsResolved(tx).then(() => resolve());
       })
-    );
+    });
+    this.txProcessedPromises.push(txProcessedPromise);
 
   }
 

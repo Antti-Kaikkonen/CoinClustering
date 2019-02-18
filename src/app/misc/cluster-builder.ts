@@ -10,11 +10,12 @@ export class ClusterBuilder {
   }
 
   addressToClusterPromise: Map<string, Promise<number>> = new Map();
+  addressToClusterId: Map<string, number> = new Map();
 
   clusterIdToCluster: Map<number, Cluster> = new Map();
   clusterAddressToCluster: Map<string, Cluster> = new Map();
 
-  txProcessedPromises: Promise<void>[] = [];
+  txProcessedPromises = [];
 
   private async getClusterId(address: string): Promise<number> {
     try {
@@ -32,13 +33,13 @@ export class ClusterBuilder {
     fromCluster.addresses.forEach(address => this.clusterAddressToCluster.set(address, toCluster));
   }
 
-  private async onTxClusterIdsResolved(tx: Transaction) {
+  private onTxClusterIdsResolved(tx: Transaction) {
     let newCluster: Cluster = new Cluster();
     let txAddrToCluster = txAddressesToCluster(tx);
     let txAddr = txAddresses(tx);
     for (let address of txAddr) {
       let shouldCluster = txAddrToCluster.has(address);
-      let clusterId = (await this.addressToClusterPromise.get(address));
+      let clusterId = this.addressToClusterId.get(address);
       if (clusterId !== undefined) {
         if (!shouldCluster) continue;
         let intersectingCluster = this.clusterIdToCluster.get(clusterId);
@@ -70,23 +71,36 @@ export class ClusterBuilder {
   add(tx:Transaction) {
     let txAddr = txAddresses(tx);
 
-
-    let clusterIdPromises = [];
-    txAddr.forEach(address => {
-      let oldPromise = this.addressToClusterPromise.get(address);
-      if (!oldPromise) {
-        let promise = this.getClusterId(address);
-        this.addressToClusterPromise.set(address, promise);
-        clusterIdPromises.push(promise);
-      } else {
-        clusterIdPromises.push(oldPromise);
+    let txProcessedPromise = new Promise((resolve, reject) => {
+      let addressesToResolve: number = txAddr.size;
+      if(addressesToResolve === 0) {
+        console.log("tx has no addresses?"+ JSON.stringify(tx));
+        resolve();
       }
+      txAddr.forEach(address => {
+        let promise = this.addressToClusterPromise.get(address);
+        if (!promise) {
+          promise = this.getClusterId(address);
+          this.addressToClusterPromise.set(address, promise);
+        }  
+        promise.then((clusterId: number) => {
+          this.addressToClusterId.set(address, clusterId);
+          addressesToResolve--;
+          if (addressesToResolve === 0) {
+            this.onTxClusterIdsResolved(tx);
+            resolve();
+            return;
+          }
+        }, (err) => {console.log("got err", err)});
+      });
     });
-    let txProcessedPromise = new Promise<void>((resolve, reject) => {
-      Promise.all(clusterIdPromises).then(() => {
-        this.onTxClusterIdsResolved(tx).then(() => resolve());
+
+    /*let txProcessedPromise = new Promise<void>((resolve, reject) => {
+      txAddressClusterIdsResolved.then(() => {
+        this.onTxClusterIdsResolved(tx);
+        resolve();
       })
-    });
+    });*/
     this.txProcessedPromises.push(txProcessedPromise);
 
   }

@@ -55,8 +55,13 @@ export class ClusterAddressService {
     fromClusterIds.forEach(fromClusterId => {
       promises.push(this.getClusterAddresses(fromClusterId));
     });
-  
-    let values = await Promise.all(promises);
+    let values
+    try {
+      values = await Promise.all(promises);
+    } catch(err) {
+      if (err.notFound) console.log("Failed to get ", err.originalKey);
+      throw err;
+    }
     let nextIndex = values[0].addressCount;
 
     for (let clusterIndex = 0; clusterIndex < fromClusterIds.length; clusterIndex++) {

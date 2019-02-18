@@ -63,6 +63,7 @@ export abstract class PrefixTable<K, V> implements Table<K, V> {
       this.db.get(this.keyAsBuffer(key)).then(valueAsBuffer => {
         resolve(this.valueencoding.decode(valueAsBuffer));
       }, (err) => {
+        err.originalKey = key;
         reject(err);
       })
     });

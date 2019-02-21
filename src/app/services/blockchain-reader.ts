@@ -1,20 +1,18 @@
 import { AbstractBatch } from "abstract-leveldown";
 import { Readable, Transform } from "stream";
+import RestApi from '../misc/rest-api';
+import RpcApi from '../misc/rpc-api';
+import { JSONtoAmount } from "../misc/utils";
 import { BlockWithTransactions } from "../models/block";
 import { Transaction } from "../models/transaction";
 import { OutputCacheTable } from "../tables/output-cache-table";
-import RestApi from '../utils/rest-api';
-import RpcApi from '../utils/rpc-api';
-import { JSONtoAmount } from "../utils/utils";
 import { AddressEncodingService } from "./address-encoding-service";
 import { BinaryDB } from "./binary-db";
-
 
 let _outputCacheTable: OutputCacheTable;
 let _restApi: RestApi;
 let _rpcApi: RpcApi;
 let _db: BinaryDB;
-
 
 export class BlockchainReader {
   constructor(restApi: RestApi, rpcApi: RpcApi, addressEncodingService: AddressEncodingService, db: BinaryDB) {

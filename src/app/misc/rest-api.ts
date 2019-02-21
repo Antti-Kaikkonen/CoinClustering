@@ -5,7 +5,6 @@ export default class RestApi {
 
 
   constructor(private host: string, private port: number) {
-
   }
 
   async restblock(hash: string): Promise<BlockWithTransactions> {

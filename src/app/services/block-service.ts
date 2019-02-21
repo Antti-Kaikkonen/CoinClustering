@@ -4,7 +4,6 @@ import { BinaryDB } from './binary-db';
 export class BlockService {
 
   constructor(private db: BinaryDB, private rpc: RpcClient) {
-
   }  
 
   async getRpcBlockHash(height: number): Promise<string> {

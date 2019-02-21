@@ -1,4 +1,5 @@
 import { ClusterBuilder } from "../misc/cluster-builder";
+import { txAddressBalanceChanges, txAddresses } from "../misc/utils";
 import { BlockWithTransactions } from "../models/block";
 import { Cluster } from "../models/cluster";
 import { AddressClusterTable } from "../tables/address-cluster-table";
@@ -8,9 +9,7 @@ import { ClusterMergedToTable } from "../tables/cluster-merged-to-table";
 import { ClusterTransactionTable } from "../tables/cluster-transaction-table";
 import { LastMergedHeightTable } from "../tables/last-merged-height-table";
 import { LastSavedTxHeightTable } from "../tables/last-saved-tx-height-table";
-import { LastSavedTxNTable } from "../tables/last-saved-tx-n-table";
 import { NextClusterIdTable } from "../tables/next-cluster-id-table";
-import { txAddressBalanceChanges, txAddresses } from "../utils/utils";
 import { AddressEncodingService } from "./address-encoding-service";
 import { BinaryDB } from "./binary-db";
 import { ClusterAddressService } from "./cluster-address-service";
@@ -23,7 +22,6 @@ export class BlockImportService {
   nextClusterIdTable: NextClusterIdTable;
   lastMergedHeightTable: LastMergedHeightTable;
   lastSavedTxHeightTable: LastSavedTxHeightTable;
-  lastSavedTxNTable: LastSavedTxNTable;
   clusterTransactionTable: ClusterTransactionTable;
   balanceToClusterTable: BalanceToClusterTable;
   clusterBalanceTable: ClusterBalanceTable;
@@ -37,7 +35,6 @@ export class BlockImportService {
       this.nextClusterIdTable = new NextClusterIdTable(db);
       this.lastMergedHeightTable = new LastMergedHeightTable(db);
       this.lastSavedTxHeightTable = new LastSavedTxHeightTable(db);
-      this.lastSavedTxNTable = new LastSavedTxNTable(db);
       this.clusterTransactionTable = new ClusterTransactionTable(db);
       this.balanceToClusterTable = new BalanceToClusterTable(db);
       this.clusterBalanceTable = new ClusterBalanceTable(db);
@@ -45,7 +42,6 @@ export class BlockImportService {
 
   lastMergedHeight: number;
   lastSavedTxHeight: number;
-  lastSavedTxN: number;
   nextClusterId: number;
 
 
@@ -67,17 +63,6 @@ export class BlockImportService {
       clusterToDelta.set(clusterId, oldBalance+addressDelta);
     });
     return clusterToDelta;
-  }
-  
-
-  
-  private async getAddressClusterInfo(address: string): Promise<{address: string, clusterId?: number}> {
-    try {
-      let cluster = await this.addressClusterTable.get({address: address});
-      return {address: address, clusterId: cluster.clusterId};
-    } catch(err) {
-      return {address: address};
-    }  
   }
 
   async processClusters(clusters: Cluster[], lastBlockHeight: number) {
@@ -237,17 +222,6 @@ export class BlockImportService {
       }
     }
     return this.lastSavedTxHeight;
-  }
-
-  private async getLastSavedTxN(): Promise<number> {
-    if (this.lastSavedTxN === undefined) {
-      try {
-        this.lastSavedTxN = (await this.lastSavedTxNTable.get(undefined)).n;
-      } catch (err) {
-        this.lastSavedTxN = -1;
-      }
-    }
-    return this.lastSavedTxN;
   }
 
   private async getNextClusterId(): Promise<number> {

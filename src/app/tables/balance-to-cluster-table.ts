@@ -1,5 +1,5 @@
 import * as lexi from 'lexint';
-import { db_balace_to_cluster_prefix } from "../services/db-constants";
+import { db_balace_to_cluster_prefix } from "../misc/db-constants";
 import { PrefixTable } from './prefix-table';
 
 export class BalanceToClusterTable extends PrefixTable< { balance: number, clusterId?: number}, 

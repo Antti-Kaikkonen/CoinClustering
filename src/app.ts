@@ -4,6 +4,8 @@ import express from 'express';
 import rocksDB from 'rocksdb';
 import { Writable } from 'stream';
 import { ClusterController } from './app/controllers/cluster-controller';
+import RestApi from './app/misc/rest-api';
+import RpcApi from './app/misc/rpc-api';
 import { BlockWithTransactions } from './app/models/block';
 import clusterRoutes from './app/routes/cluster';
 import { AddressEncodingService } from './app/services/address-encoding-service';
@@ -13,8 +15,6 @@ import { BlockchainReader } from './app/services/blockchain-reader';
 import { ClusterAddressService } from './app/services/cluster-address-service';
 import { ClusterTransactionService } from './app/services/cluster-transaction-service';
 import { OutputCacheTable } from './app/tables/output-cache-table';
-import RestApi from './app/utils/rest-api';
-import RpcApi from './app/utils/rpc-api';
 
 
 

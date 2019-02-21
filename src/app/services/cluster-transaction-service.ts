@@ -1,20 +1,17 @@
-import { ClusterTransaction } from '../models/cluster-balance';
+import { ClusterTransaction } from '../models/cluster-transaction';
 import { BalanceToClusterTable } from '../tables/balance-to-cluster-table';
 import { ClusterBalanceTable } from '../tables/cluster-balance-table';
 import { ClusterTransactionTable } from '../tables/cluster-transaction-table';
-import { LastSavedTxNTable } from '../tables/last-saved-tx-n-table';
 import { BinaryDB } from './binary-db';
 
 export class ClusterTransactionService {
   
   clusterTransactionTable: ClusterTransactionTable;
-  lastSavedTxNTable: LastSavedTxNTable;
   balanceToClusterTable: BalanceToClusterTable;
   clusterBalanceTable: ClusterBalanceTable;
 
   constructor(private db: BinaryDB) {
     this.clusterTransactionTable = new ClusterTransactionTable(db);
-    this.lastSavedTxNTable = new LastSavedTxNTable(db);
     this.balanceToClusterTable = new BalanceToClusterTable(db);
     this.clusterBalanceTable = new ClusterBalanceTable(db);
   }  
@@ -42,7 +39,6 @@ export class ClusterTransactionService {
       });
     });  
   }
-
 
   async getClusterBalanceWithUndefined(clusterId: number): Promise<number> {
     return new Promise<number>((resolve, reject) => {

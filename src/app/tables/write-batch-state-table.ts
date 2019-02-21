@@ -1,4 +1,4 @@
-import { db_write_batch_state_prefix } from "../services/db-constants";
+import { db_write_batch_state_prefix } from "../misc/db-constants";
 import { PrefixTable } from "./prefix-table";
 
 const BYTE_EMPTY = 0;

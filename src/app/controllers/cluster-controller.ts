@@ -1,4 +1,6 @@
 import { Request, Response } from 'express';
+import RpcApi from '../misc/rpc-api';
+import { txAddressBalanceChanges } from '../misc/utils';
 import { Transaction } from '../models/transaction';
 import { AddressEncodingService } from '../services/address-encoding-service';
 import { BinaryDB } from '../services/binary-db';
@@ -7,8 +9,6 @@ import { ClusterTransactionService } from '../services/cluster-transaction-servi
 import { AddressClusterTable } from '../tables/address-cluster-table';
 import { BalanceToClusterTable } from '../tables/balance-to-cluster-table';
 import { ClusterMergedToTable } from '../tables/cluster-merged-to-table';
-import RpcApi from '../utils/rpc-api';
-import { txAddressBalanceChanges } from '../utils/utils';
 
 
 export class ClusterController {
@@ -67,7 +67,6 @@ export class ClusterController {
     addressToDelta.forEach((delta: number, address: string) => {
       addresses.push(address);
       promises.push(this.addressClusterTable.get({address: address}));
-      //promises.push(this.db.get(db_address_cluster_prefix+address));
     });
     let clusterIds = await Promise.all(promises);
     let clusterToDelta = new Map<number, number>();
@@ -106,9 +105,7 @@ export class ClusterController {
       }
     });
     let balanceChanges: Map<string, number> = txAddressBalanceChanges(tx);
-
     let clusterBalanceChanges = await this.addressBalanceChangesToClusterBalanceChanges(balanceChanges);
-    //console.log("clusterBalanceChanges", clusterBalanceChanges);
     let result = {};
     clusterBalanceChanges.forEach((delta: number, clusterId: number) => {
       result[clusterId] = delta;

@@ -1,5 +1,5 @@
 import * as lexi from 'lexint';
-import { db_cluster_transaction_prefix } from "../services/db-constants";
+import { db_cluster_transaction_prefix } from "../misc/db-constants";
 import { PrefixTable } from './prefix-table';
 
 const TXID_BYTE_LENGTH = 32;

@@ -16,13 +16,10 @@ function calculateDoubleSha256CheckSum(data: Buffer): Buffer {
   return second.slice(0, 4);
 }
 
-
 export class AddressEncodingService {
-
 
   constructor(private pubkeyhash: number, private scripthash: number, private segwitprefix?: string) {
   }
-
 
   addressToBytes(address: string): Buffer {
     if (this.segwitprefix && address.startsWith(this.segwitprefix) && address.length > 35) {

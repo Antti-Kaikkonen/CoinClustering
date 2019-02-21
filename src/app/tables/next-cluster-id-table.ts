@@ -1,5 +1,5 @@
 import * as lexi from 'lexint';
-import { db_next_cluster_id } from "../services/db-constants";
+import { db_next_cluster_id } from "../misc/db-constants";
 import { PrefixTable } from './prefix-table';
 
 export class NextClusterIdTable extends PrefixTable<undefined, { nextClusterId: number }> {

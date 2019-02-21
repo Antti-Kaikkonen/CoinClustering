@@ -1,5 +1,5 @@
 import * as lexi from 'lexint';
-import { db_cluster_merged_to } from "../services/db-constants";
+import { db_cluster_merged_to } from "../misc/db-constants";
 import { PrefixTable } from './prefix-table';
 
 export class ClusterMergedToTable extends PrefixTable< { fromClusterId: number}, { toClusterId: number }> {

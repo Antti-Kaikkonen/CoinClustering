@@ -5,8 +5,6 @@ import { NextClusterIdTable } from '../tables/next-cluster-id-table';
 import { AddressEncodingService } from './address-encoding-service';
 import { BinaryDB } from './binary-db';
 
-
-
 export class ClusterAddressService {
 
   clusterAddressTable: ClusterAddressTable;
@@ -24,7 +22,6 @@ export class ClusterAddressService {
   async getAddressCluster(address: string): Promise<number> {
     return (await this.addressClusterTable.get({address: address})).clusterId;
   }
-
 
   async getClusterAddresses(clusterId: number): Promise<string[]> {
     return new Promise<string[]>((resolve, reject) => {

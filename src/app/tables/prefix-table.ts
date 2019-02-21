@@ -3,15 +3,12 @@ import { EventEmitter } from "events";
 import { Transform } from "stream";
 import { BinaryDB } from "../services/binary-db";
 
-
-
 export abstract class PrefixTable<K, V> implements Table<K, V> {
 
   constructor(private db: BinaryDB) {
   }
 
   abstract prefix: Buffer;
-  //private prefixBuffer = Buffer.from(this.prefix);
 
   abstract keyencoding: EncodeDecode<K>;
 
@@ -19,7 +16,6 @@ export abstract class PrefixTable<K, V> implements Table<K, V> {
 
   private prefixAsBuffer(): Buffer {
     return this.prefix;
-    //return Buffer.from(this.prefix);
   }
 
   putOperation(key: K, value: V): AbstractBatch<Buffer, Buffer> {
@@ -54,7 +50,6 @@ export abstract class PrefixTable<K, V> implements Table<K, V> {
   }
 
   public bufferAsKey(buffer: Buffer): K {
-    //console.log("bufferAsKey");
     return this.keyencoding.decode(buffer.slice(this.prefix.length));
   }
 
@@ -78,9 +73,7 @@ export abstract class PrefixTable<K, V> implements Table<K, V> {
   }
 
   createReadStream(options?: AbstractIteratorOptions<K>): NodeJS.ReadableStream {
-    let bufferOptions: AbstractIteratorOptions<Buffer> = {
-
-    };
+    let bufferOptions: AbstractIteratorOptions<Buffer> = {};
     let decoder: Transform;
     if (!options) {
       bufferOptions.gte = this.prefixAsBuffer();
@@ -120,10 +113,8 @@ export abstract class PrefixTable<K, V> implements Table<K, V> {
         decoder = new ReadStreamDecoder(this);
       }
     }
-    //console.log("bufferOptions", bufferOptions);
     return this.db.createReadStream(bufferOptions).pipe(decoder);
   }
-
 }
 
 class ValueStreamDecoder<K, V> extends Transform implements EventEmitter {

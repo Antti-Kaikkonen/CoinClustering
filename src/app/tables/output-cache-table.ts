@@ -1,7 +1,7 @@
 import * as lexi from 'lexint';
+import { db_output_prefix } from '../misc/db-constants';
 import { AddressEncodingService } from '../services/address-encoding-service';
 import { BinaryDB } from '../services/binary-db';
-import { db_output_prefix } from '../services/db-constants';
 import { PrefixTable } from './prefix-table';
 
 export class OutputCacheTable extends PrefixTable<{txid: string, n: number}, { addresses: string[], valueSat: number }> {

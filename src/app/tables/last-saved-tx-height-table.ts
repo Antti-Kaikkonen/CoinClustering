@@ -1,5 +1,5 @@
 import * as lexi from 'lexint';
-import { db_last_saved_tx_height } from "../services/db-constants";
+import { db_last_saved_tx_height } from "../misc/db-constants";
 import { PrefixTable } from './prefix-table';
 
 export class LastSavedTxHeightTable extends PrefixTable<undefined, { height: number }> {

@@ -1,7 +1,7 @@
 import { Cluster } from "../models/cluster";
 import { Transaction } from "../models/transaction";
 import { AddressClusterTable } from "../tables/address-cluster-table";
-import { txAddresses, txAddressesToCluster } from "../utils/utils";
+import { txAddresses, txAddressesToCluster } from "./utils";
 
 export class ClusterBuilder {
 
@@ -94,15 +94,7 @@ export class ClusterBuilder {
         }, (err) => {console.log("got err", err)});
       });
     });
-
-    /*let txProcessedPromise = new Promise<void>((resolve, reject) => {
-      txAddressClusterIdsResolved.then(() => {
-        this.onTxClusterIdsResolved(tx);
-        resolve();
-      })
-    });*/
     this.txProcessedPromises.push(txProcessedPromise);
-
   }
 
   async build(): Promise<Cluster[]> {

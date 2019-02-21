@@ -11,7 +11,6 @@ import { ClusterTransactionService } from './app/services/cluster-transaction-se
 
 describe('Save a blocks with 3 transactions', () => {
 
-
   const dbpath = './test-db';
 
   let db;
@@ -35,7 +34,6 @@ describe('Save a blocks with 3 transactions', () => {
 
     await blockImportService.saveBlock(b1);
   });
-
 
   let address1 = "XcEAhjPb3ZCz5KAzwGjSikvCACiVzwtFez";
   let address2 = "XcYGbqfqHPXhRUTF6W9GER26PshWEd7NQ2";
@@ -203,7 +201,6 @@ describe('Save a blocks with 3 transactions', () => {
     ]
   };
 
-
   it('address3 and address4 should be in the same cluster', async () => {
     let c1 = await clusterAddressService.getAddressCluster(address3);
     let c2 = await clusterAddressService.getAddressCluster(address4);
@@ -240,13 +237,6 @@ describe('Save a blocks with 3 transactions', () => {
     let transactions = await clusterTransactionService.getClusterTransactions(c);
     expect(transactions).lengthOf(3);
   });
-
-  /*it('address3 cluster transaction indexes should be [0, 1, 2]', async () => {
-    let c = await clusterAddressService.getAddressCluster(address3);
-    let transactions = await clusterTransactionService.getClusterTransactions(c);
-    let indexes = transactions.map(tx => tx.id);
-    expect(indexes).to.deep.equal([0, 1, 2]);
-  });*/
 
   it('address3 cluster balance should be 0', async () => {
     let c = await clusterAddressService.getAddressCluster(address3);

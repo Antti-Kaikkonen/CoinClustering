@@ -11,7 +11,6 @@ export default class RpcApi {
     this.rpc = new RpcClient({host: host, port: port, protocol: protocol, user: user, pass: pass});
   }
 
-
   private async getTransactionsHelper(txids: string[]): Promise<Transaction[]> {
     let batchCall = () => {
       txids.forEach(txid => this.rpc.getRawTransaction(txid, 1));

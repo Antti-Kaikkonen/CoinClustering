@@ -13,7 +13,6 @@ export class WriteBatchService {
   writeBatchStateTable: WriteBatchStateTable;
   writeBatchState: WriteBatchState;
   state: WriteBatchState;
-  //pushPromises: Promise<void>[] = [];
 
   constructor(private db: BinaryDB) {
     this.writeBatchStateTable = new WriteBatchStateTable(db);
@@ -62,7 +61,6 @@ export class WriteBatchService {
       this.state = "filling";
     }
   }
-
 
   private async saveWriteBatchTable(): Promise<void> {
     console.log("saveWriteBatchTable");
@@ -155,11 +153,8 @@ export class WriteBatchService {
   }
 
   async commit() {
-    //await Promise.all(this.pushPromises);
-    //this.pushPromises = [];
     if (await this.getWriteBatchState() === "empty") {
       if (this.ops.length === 0) return;
-      //console.log("commit empty");
       await this.db.batchBinary(this.ops);
       this.ops = [];
       return;
@@ -171,6 +166,5 @@ export class WriteBatchService {
     this.state = 'emptying';
     await this.saveWriteBatchTable();
   }
-
 
 }  

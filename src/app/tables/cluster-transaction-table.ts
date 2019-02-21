@@ -6,12 +6,11 @@ const TXID_BYTE_LENGTH = 32;
 const SIGN_NEGATIVE = 0;
 
 export class ClusterTransactionTable extends PrefixTable< { clusterId: number, height?: number, n?: number}, 
-{ txid: string, balanceDelta: number }> {
+{ txid: string }> {
 
   prefix = db_cluster_transaction_prefix;
   keyencoding = {
     encode: (key: { clusterId: number, height?: number, n?: number}): Buffer => {
-      //console.log("encoding ", key);
       if (key.height === undefined) 
         return lexi.encode(key.clusterId);
       else if (key.n === undefined)
@@ -32,34 +31,16 @@ export class ClusterTransactionTable extends PrefixTable< { clusterId: number, h
   };
 
   valueencoding = {
-    encode: (key: { txid: string, balanceDelta: number }): Buffer => {
-      if (!Number.isInteger(key.balanceDelta)) throw Error("balanceDelta ("+key.balanceDelta+") must be an integer");
+    encode: (key: { txid: string }): Buffer => {
       let txidBytes = Buffer.from(key.txid, 'hex');
       if (txidBytes.length !== TXID_BYTE_LENGTH) throw Error("TXID must be " + TXID_BYTE_LENGTH +" bytes");
-      let balanceBytes = lexi.encode(Math.abs(key.balanceDelta));
-      let signBytes: Buffer;
-      if (key.balanceDelta < 0) 
-        signBytes = Buffer.from([SIGN_NEGATIVE]); 
-      else 
-        signBytes = Buffer.alloc(0);
-      //console.log("cluster-balance-table valueencoding", key, Buffer.concat([txidBytes, balanceBytes, heightBytes, nBytes]));
-      return Buffer.concat([txidBytes, balanceBytes, signBytes]);
+      return txidBytes;
     },
-    decode: (buf: Buffer): { txid: string, balanceDelta: number } => {
+    decode: (buf: Buffer): { txid: string } => {
       let offset = 0;
       let txid = buf.toString('hex', offset, 32);
-      offset += 32;
-      let balanceDelta = lexi.decode(buf, offset);
-      if (Number.isNaN(balanceDelta.value)) {
-        console.log("BALANCEDELTA NAN", balanceDelta.value, balanceDelta.byteLength);
-      }
-      offset += balanceDelta.byteLength;
-      if (offset < buf.length && buf[offset] === SIGN_NEGATIVE) {
-        balanceDelta.value *= -1;
-      }
       return {
-        txid: txid,
-        balanceDelta: balanceDelta.value
+        txid: txid
       };
     }
   };

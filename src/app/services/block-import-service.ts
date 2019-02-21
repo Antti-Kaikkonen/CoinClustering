@@ -5,7 +5,6 @@ import { AddressClusterTable } from "../tables/address-cluster-table";
 import { BalanceToClusterTable } from "../tables/balance-to-cluster-table";
 import { ClusterBalanceTable } from "../tables/cluster-balance-table";
 import { ClusterMergedToTable } from "../tables/cluster-merged-to-table";
-import { ClusterTransactionCountTable } from "../tables/cluster-transaction-count-table";
 import { ClusterTransactionTable } from "../tables/cluster-transaction-table";
 import { LastMergedHeightTable } from "../tables/last-merged-height-table";
 import { LastSavedTxHeightTable } from "../tables/last-saved-tx-height-table";
@@ -27,7 +26,6 @@ export class BlockImportService {
   lastSavedTxNTable: LastSavedTxNTable;
   clusterTransactionTable: ClusterTransactionTable;
   balanceToClusterTable: BalanceToClusterTable;
-  clusterBalanceCountTable: ClusterTransactionCountTable;
   clusterBalanceTable: ClusterBalanceTable;
 
   constructor(private db: BinaryDB,
@@ -42,7 +40,6 @@ export class BlockImportService {
       this.lastSavedTxNTable = new LastSavedTxNTable(db);
       this.clusterTransactionTable = new ClusterTransactionTable(db);
       this.balanceToClusterTable = new BalanceToClusterTable(db);
-      this.clusterBalanceCountTable = new ClusterTransactionCountTable(db);
       this.clusterBalanceTable = new ClusterBalanceTable(db);
   }  
 
@@ -140,15 +137,6 @@ export class BlockImportService {
     this.lastMergedHeight = block.height;
   }
 
-
-  async getClusterBalanceAndTxCount(clusterId: number): Promise<{balance: number, txCount: number}> {
-    let promises = [];
-    promises.push(this.clusterTransactionService.getClusterBalance(clusterId));
-    promises.push(this.clusterTransactionService.getTransactionCount(clusterId));
-    let res = await Promise.all(promises);
-    return {balance: res[0], txCount: res[1]};
-  }
-
   async saveBlockTransactionsAsync(block: BlockWithTransactions): Promise<void> {
     console.log(block.height, "saving transactions");
     if (block.height <= await this.getLastSavedTxHeight()) {
@@ -164,7 +152,7 @@ export class BlockImportService {
 
     let addressToClusterId: Map<string, number> = new Map();
 
-    let clusterIdToBalanceAndTxCountPromise: Map<number, Promise<{balance: number, txCount: number}>> = new Map();
+    let clusterIdToBalancePromise: Map<number, Promise<number>> = new Map();
     let allAddressesResolved: Promise<void> = new Promise((resolve, reject) => {
       let addressesToReolve: number = blockAddressesArray.length;
       blockAddressesArray.forEach(address => {
@@ -172,8 +160,8 @@ export class BlockImportService {
         addressToClusterIdPromise.then((res: {clusterId: number}) => {
           let clusterId = res.clusterId;
           addressToClusterId.set(address, clusterId);
-          if (!clusterIdToBalanceAndTxCountPromise.has(clusterId)) {
-            clusterIdToBalanceAndTxCountPromise.set(clusterId, this.getClusterBalanceAndTxCount(clusterId));
+          if (!clusterIdToBalancePromise.has(clusterId)) {
+            clusterIdToBalancePromise.set(clusterId, this.clusterTransactionService.getClusterBalanceWithUndefined(clusterId));
           }
           addressesToReolve--;
           if (addressesToReolve === 0) resolve();
@@ -184,15 +172,9 @@ export class BlockImportService {
 
     let clusterIdToBalance: Map<number, number> = new Map();
     let clusterIdToOldBalance: Map<number, number> = new Map();
-    let clusterIdToTxCount: Map<number, number> = new Map();
-    let clusterIdToOldTxCount: Map<number, number> = new Map();
 
-    for (let clusterId of clusterIdToBalanceAndTxCountPromise.keys()) {
-      let balanceAndTxCount: {balance: number, txCount: number} = await clusterIdToBalanceAndTxCountPromise.get(clusterId);
-      let txCount = balanceAndTxCount.txCount;
-      let balance = balanceAndTxCount.balance;
-      clusterIdToTxCount.set(clusterId, txCount);
-      clusterIdToOldTxCount.set(clusterId, txCount);
+    for (let clusterId of clusterIdToBalancePromise.keys()) {
+      let balance = await clusterIdToBalancePromise.get(clusterId);
       clusterIdToBalance.set(clusterId, balance);
       clusterIdToOldBalance.set(clusterId, balance);
     };
@@ -208,23 +190,18 @@ export class BlockImportService {
         clusterIdToDelta.set(clusterId, oldDelta+delta);
       });
       for (const [clusterId, delta] of clusterIdToDelta) {
-        let txCount = clusterIdToTxCount.get(clusterId);
-        txCount++;
-        clusterIdToTxCount.set(clusterId, txCount);
         let oldBalance = clusterIdToBalance.get(clusterId);
+        if (oldBalance === undefined) oldBalance = 0;
         let newBalance: number = oldBalance + delta;
         clusterIdToBalance.set(clusterId, newBalance);
         await this.db.writeBatchService.push(
-          this.clusterTransactionTable.putOperation({clusterId: clusterId, height: block.height, n: txN}, {txid: tx.txid, balanceDelta: delta})
+          this.clusterTransactionTable.putOperation({clusterId: clusterId, height: block.height, n: txN}, {txid: tx.txid})
         );
       };
     }
-    for (const [clusterId, txCount] of clusterIdToTxCount) {
-      await this.db.writeBatchService.push(this.clusterBalanceCountTable.putOperation({clusterId: clusterId}, {balanceCount: txCount}));
-    };
     for (const [clusterId, balance] of clusterIdToBalance) {
       let oldBalance = clusterIdToOldBalance.get(clusterId);
-      let balanceExists = clusterIdToOldTxCount.get(clusterId) > 0;
+      let balanceExists = oldBalance !== undefined;
       await this.db.writeBatchService.push(this.clusterBalanceTable.putOperation({clusterId: clusterId}, {balance: balance}));
       if (!balanceExists || oldBalance !== balance) {
         await this.db.writeBatchService.push(this.balanceToClusterTable.putOperation({balance: balance, clusterId: clusterId}, {}));

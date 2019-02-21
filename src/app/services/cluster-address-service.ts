@@ -3,7 +3,6 @@ import { ClusterAddressCountTable } from '../tables/cluster-address-count-table'
 import { ClusterAddressTable } from '../tables/cluster-address-table';
 import { NextClusterIdTable } from '../tables/next-cluster-id-table';
 import { AddressEncodingService } from './address-encoding-service';
-//import { integer2LexString } from '../utils/utils';
 import { BinaryDB } from './binary-db';
 
 

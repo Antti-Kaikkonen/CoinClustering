@@ -37,6 +37,31 @@ export class ClusterController {
     return undefined;
   }
 
+  clusterInfo = async (req: Request, res: Response) => {
+    let clusterId: number = Number(req.params.id);
+    let redirectToCluster = await this.redirectToCluster(clusterId);
+    if (redirectToCluster !== undefined) {
+      let newPath = req.baseUrl+req.route.path.replace(':id', redirectToCluster);
+      res.redirect(301, newPath);
+    } else {
+      let addressCountPromise = this.clusterAddressService.getAddressCount(clusterId);
+      let balancePromise = this.clusterTransactionService.getClusterBalanceWithUndefined(clusterId);
+      let firstTransactionPromise = this.clusterTransactionService.getFirstTransaction(clusterId);
+      let lastTransactionPromise = this.clusterTransactionService.getLastClusetrTransaction(clusterId);
+      let addressCount = await addressCountPromise;
+      if (addressCount === undefined) {
+        res.sendStatus(404);
+      } else {
+        res.send({
+          balance: await balancePromise,
+          firstTransaction: await firstTransactionPromise,
+          lastTransaction: await lastTransactionPromise,
+          addressCount: await addressCountPromise
+        });
+      }
+    }  
+  }
+
   clusterTransactions = async (req:Request, res:Response) => {
     let clusterId: number = Number(req.params.id);
     let redirectToCluster = await this.redirectToCluster(clusterId);

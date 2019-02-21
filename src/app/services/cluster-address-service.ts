@@ -23,6 +23,17 @@ export class ClusterAddressService {
     return (await this.addressClusterTable.get({address: address})).clusterId;
   }
 
+  async getAddressCount(clusterId: number): Promise<number> {
+    try {
+      return (await this.clusterAddressCountTable.get({clusterId: clusterId})).addressCount;
+    } catch(err) {
+      if (err.notFound) {
+        return undefined;
+      }
+      throw err;
+    }
+  }
+
   async getClusterAddresses(clusterId: number): Promise<string[]> {
     return new Promise<string[]>((resolve, reject) => {
       let addresses: string[] = [];
@@ -46,19 +57,13 @@ export class ClusterAddressService {
   async mergeClusterAddressesOps(toClusterId: number, fromClusterIds: number[], nonClusterAddresses?: string[]): Promise<void> {
     if (fromClusterIds.length === 0 && (nonClusterAddresses === undefined || nonClusterAddresses.length === 0)) return;
     let promises: Promise<any>[] = [];
-    promises.push(this.clusterAddressCountTable.get({clusterId: toClusterId}));
+    promises.push(this.getAddressCount(toClusterId));
 
     fromClusterIds.forEach(fromClusterId => {
       promises.push(this.getClusterAddresses(fromClusterId));
     });
-    let values
-    try {
-      values = await Promise.all(promises);
-    } catch(err) {
-      if (err.notFound) console.log("Failed to get ", err.originalKey);
-      throw err;
-    }
-    let nextIndex = values[0].addressCount;
+    let values = await Promise.all(promises);
+    let nextIndex = values[0];
 
     for (let clusterIndex = 0; clusterIndex < fromClusterIds.length; clusterIndex++) {
       let fromClusterId = fromClusterIds[clusterIndex];
@@ -96,7 +101,7 @@ export class ClusterAddressService {
 
   async addAddressesToClusterOps(addresses: string[], clusterId: number, oldClusterAddressCount?: number): Promise<void> {
     if (oldClusterAddressCount === undefined) {
-      oldClusterAddressCount = (await this.clusterAddressCountTable.get({clusterId: clusterId})).addressCount;
+      oldClusterAddressCount = await this.getAddressCount(clusterId);
     }
     for (const [index, address] of addresses.entries()) {
       let newIndex: number = Number(oldClusterAddressCount)+index;

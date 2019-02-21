@@ -3,10 +3,12 @@ import EncodingDown from 'encoding-down';
 import express from 'express';
 import rocksDB from 'rocksdb';
 import { Writable } from 'stream';
+import { AddressController } from './app/controllers/address-controller';
 import { ClusterController } from './app/controllers/cluster-controller';
 import RestApi from './app/misc/rest-api';
 import RpcApi from './app/misc/rpc-api';
 import { BlockWithTransactions } from './app/models/block';
+import addressRoutes from './app/routes/address';
 import clusterRoutes from './app/routes/cluster';
 import { AddressEncodingService } from './app/services/address-encoding-service';
 import { BinaryDB } from './app/services/binary-db';
@@ -46,6 +48,8 @@ let clusterAddressService = new ClusterAddressService(db, addressEncodingService
 
 let clusterController = new ClusterController(db, addressEncodingService, rpcApi);
 
+let addressController = new AddressController(db, addressEncodingService);
+
 let blockImportService = new BlockImportService(db, clusterAddressService, clusterBalanceService, addressEncodingService);
 
 let outputCacheTable = new OutputCacheTable(db, addressEncodingService);
@@ -55,22 +59,9 @@ let blockchainReader = new BlockchainReader(restApi, rpcApi, addressEncodingServ
 const app = express();
 app.use(cors());
 
-app.use('/cluster', clusterRoutes(clusterController));
+app.use('/clusters', clusterRoutes(clusterController));
+app.use('/addresses', addressRoutes(addressController));
 app.listen(config.listen_port);
-
-
-
-
-async function deleteBlockInputs(block: BlockWithTransactions) {
-  let delOps = [];
-  block.tx.forEach(tx => {
-    tx.vin.forEach(vin => {
-      if (vin.coinbase) return;
-      delOps.push(outputCacheTable.delOperation({txid: vin.txid, n: vin.vout}));
-    });
-  });
-  db.batchBinary(delOps);
-}
 
 const stay_behind_blocks = 100;
 

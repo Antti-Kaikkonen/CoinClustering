@@ -60,6 +60,55 @@ export class ClusterTransactionService {
     return res;
   }
 
+  async getFirstTransaction(clusterId: number): Promise<ClusterTransaction> {
+    return new Promise<ClusterTransaction>((resolve, reject) => {
+      let transaction;
+      let rs = this.clusterTransactionTable.createReadStream({
+        gte: {clusterId: clusterId},
+        lt: {clusterId: clusterId+1},
+        limit: 1
+      });
+      rs.on("data", function(data) {
+        transaction = new ClusterTransaction(
+          data.value.txid,
+          data.key.height,
+          data.key.n
+        );
+      })
+      .on('error', function (err) {
+        reject(err);
+      })
+      .on('finish', function () {
+        resolve(transaction);
+      });
+    });
+  }
+
+  async getLastClusetrTransaction(clusterId: number): Promise<ClusterTransaction> {
+    return new Promise<ClusterTransaction>((resolve, reject) => {
+      let transaction;
+      let rs = this.clusterTransactionTable.createReadStream({
+        gte: {clusterId: clusterId},
+        lt: {clusterId: clusterId+1},
+        limit: 1,
+        reverse: true
+      });
+      rs.on("data", function(data) {
+        transaction = new ClusterTransaction(
+          data.value.txid,
+          data.key.height,
+          data.key.n
+        );
+      })
+      .on('error', function (err) {
+        reject(err);
+      })
+      .on('finish', function () {
+        resolve(transaction);
+      });
+    });
+  }
+
   async getClusterTransaction(clusterId: number, height: number, n: number): Promise<ClusterTransaction> {
     let value = await this.clusterTransactionTable.get({clusterId: clusterId, height: height, n: n});
     let cb = new ClusterTransaction(value.txid/*, value.balanceDelta*/, height, n);

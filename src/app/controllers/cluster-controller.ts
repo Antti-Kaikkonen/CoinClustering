@@ -6,6 +6,7 @@ import { ClusterAddressService } from '../services/cluster-address-service';
 import { ClusterTransactionService } from '../services/cluster-transaction-service';
 import { AddressClusterTable } from '../tables/address-cluster-table';
 import { BalanceToClusterTable } from '../tables/balance-to-cluster-table';
+import { ClusterMergedToTable } from '../tables/cluster-merged-to-table';
 import RpcApi from '../utils/rpc-api';
 import { txAddressBalanceChanges } from '../utils/utils';
 
@@ -16,24 +17,48 @@ export class ClusterController {
   private clusterAddressService: ClusterAddressService;
   private balanceToClusterTable: BalanceToClusterTable;
   private addressClusterTable: AddressClusterTable;
+  private clusterMergedToTable: ClusterMergedToTable;
 
   constructor(private db: BinaryDB, addressEncodingService: AddressEncodingService, private rpcApi: RpcApi) {
     this.clusterTransactionService = new ClusterTransactionService(db);
     this.clusterAddressService = new ClusterAddressService(db, addressEncodingService);
     this.balanceToClusterTable = new BalanceToClusterTable(db);
     this.addressClusterTable = new AddressClusterTable(db, addressEncodingService);
+    this.clusterMergedToTable = new ClusterMergedToTable(db);
   }  
+
+
+  private async redirectToCluster(clusterId: number): Promise<number> {
+    try {
+      return (await this.clusterMergedToTable.get({fromClusterId: clusterId})).toClusterId;
+    } catch(err) {
+      if (!err.notFound) throw err;
+    } 
+    return undefined;
+  }
 
   clusterTransactions = async (req:Request, res:Response) => {
     let clusterId: number = Number(req.params.id);
-    let result = await this.clusterTransactionService.getClusterTransactions(clusterId);
-    res.send(result);
+    let redirectToCluster = await this.redirectToCluster(clusterId);
+    if (redirectToCluster !== undefined) {
+      let newPath = req.baseUrl+req.route.path.replace(':id', redirectToCluster);
+      res.redirect(301, newPath);
+    } else {
+      let result = await this.clusterTransactionService.getClusterTransactions(clusterId);
+      res.send(result);
+    }
   };
 
   clusterAddresses = async (req:Request, res:Response) => {
     let clusterId: number = Number(req.params.id);
-    let result = await this.clusterAddressService.getClusterAddresses(clusterId);
-    res.send(result);
+    let redirectToCluster = await this.redirectToCluster(clusterId);
+    if (redirectToCluster !== undefined) {
+      let newPath = req.baseUrl+req.route.path.replace(':id', redirectToCluster);
+      res.redirect(301, newPath);
+    } else {
+      let result = await this.clusterAddressService.getClusterAddresses(clusterId);
+      res.send(result);
+    }  
   };
 
   private async addressBalanceChangesToClusterBalanceChanges(addressToDelta: Map<string, number>): Promise<Map<number, number>> {

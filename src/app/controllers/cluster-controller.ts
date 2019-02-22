@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import RpcApi from '../misc/rpc-api';
 import { txAddressBalanceChanges } from '../misc/utils';
+import { ClusterTransaction } from '../models/cluster-transaction';
 import { Transaction } from '../models/transaction';
 import { AddressEncodingService } from '../services/address-encoding-service';
 import { BinaryDB } from '../services/binary-db';
@@ -8,7 +9,9 @@ import { ClusterAddressService } from '../services/cluster-address-service';
 import { ClusterTransactionService } from '../services/cluster-transaction-service';
 import { AddressClusterTable } from '../tables/address-cluster-table';
 import { BalanceToClusterTable } from '../tables/balance-to-cluster-table';
+import { ClusterAddressTable } from '../tables/cluster-address-table';
 import { ClusterMergedToTable } from '../tables/cluster-merged-to-table';
+import { ClusterTransactionTable } from '../tables/cluster-transaction-table';
 
 
 export class ClusterController {
@@ -18,6 +21,8 @@ export class ClusterController {
   private balanceToClusterTable: BalanceToClusterTable;
   private addressClusterTable: AddressClusterTable;
   private clusterMergedToTable: ClusterMergedToTable;
+  private clusterTransactionTable: ClusterTransactionTable;
+  private clusterAddressTable: ClusterAddressTable;
 
   constructor(private db: BinaryDB, addressEncodingService: AddressEncodingService, private rpcApi: RpcApi) {
     this.clusterTransactionService = new ClusterTransactionService(db);
@@ -25,6 +30,8 @@ export class ClusterController {
     this.balanceToClusterTable = new BalanceToClusterTable(db);
     this.addressClusterTable = new AddressClusterTable(db, addressEncodingService);
     this.clusterMergedToTable = new ClusterMergedToTable(db);
+    this.clusterTransactionTable = new ClusterTransactionTable(db);
+    this.clusterAddressTable = new ClusterAddressTable(db, addressEncodingService);
   }  
 
 
@@ -64,25 +71,113 @@ export class ClusterController {
 
   clusterTransactions = async (req:Request, res:Response) => {
     let clusterId: number = Number(req.params.id);
+
+    let limit = req.query.limit !== undefined ? Number(req.query.limit) : 100;
+    if (!Number.isInteger(limit) || limit <= 0 || limit > 1000) {
+      res.sendStatus(400);
+      return;
+    }
+
+    let afterBlock: number;
+    let afterTxN: number;
+    if (req.query.after !== undefined) {
+      let afterComponents = req.query.after.split('-');
+      if (afterComponents.length > 2) {
+        res.sendStatus(400);
+        return;
+      }
+      afterBlock = Number(afterComponents[0]);
+      if (!Number.isInteger(afterBlock) || afterBlock < 0) {
+        res.sendStatus(400);
+        return;
+      }
+      if (afterComponents.length === 2) {
+        afterTxN = Number(afterComponents[1]);
+        if (!Number.isInteger(afterTxN) || afterTxN < 0) {
+          res.sendStatus(400);
+          return;
+        }
+      }
+    }
+
     let redirectToCluster = await this.redirectToCluster(clusterId);
     if (redirectToCluster !== undefined) {
       let newPath = req.baseUrl+req.route.path.replace(':id', redirectToCluster);
       res.redirect(301, newPath);
     } else {
-      let result = await this.clusterTransactionService.getClusterTransactions(clusterId);
-      res.send(result);
+      res.contentType('application/json');
+      res.write('[');
+      let first = true;
+      let stream = this.clusterTransactionTable.createReadStream({
+        gt: {clusterId: clusterId, height: afterBlock, n: afterTxN},
+        lt: {clusterId: clusterId+1},
+        limit: limit
+      });
+      stream.on('data', (data) => {
+        if (!first) res.write(",");
+        res.write(JSON.stringify(new ClusterTransaction(
+          data.value.txid,
+          data.key.height,
+          data.key.n
+        )));
+        first = false;
+      }).on('finish', () => {
+        res.write(']');
+        res.end();
+      });
+      req.on('close', () => {
+        console.log("cancelled by user. destroying");
+        stream['destroy']();
+        console.log("destroyed");
+      });
     }
   };
 
   clusterAddresses = async (req:Request, res:Response) => {
     let clusterId: number = Number(req.params.id);
+
+    let limit = req.query.limit !== undefined ? Number(req.query.limit) : 100;
+    if (!Number.isInteger(limit) || limit <= 0 || limit > 1000) {
+      res.sendStatus(400);
+      return;
+    }
+
+    let after: number = req.query.after !== undefined ? Number(req.query.after) : undefined;
+    if (after !== undefined && (!Number.isInteger(after) || after < 0)) {
+      res.sendStatus(400);
+      return;
+    }
+
     let redirectToCluster = await this.redirectToCluster(clusterId);
     if (redirectToCluster !== undefined) {
       let newPath = req.baseUrl+req.route.path.replace(':id', redirectToCluster);
       res.redirect(301, newPath);
     } else {
-      let result = await this.clusterAddressService.getClusterAddresses(clusterId);
-      res.send(result);
+      res.contentType('application/json');
+      res.write('[');
+      let first = true;
+      
+      let stream = this.clusterAddressTable.createReadStream({
+        gt: {clusterId: clusterId, addressIndex: after},
+        lt: {clusterId: clusterId+1},
+        limit: limit
+      });
+      stream.on('data', (data) => {
+        if (!first) res.write(",");
+        res.write(JSON.stringify({
+          adressIndex: data.key.addressIndex,
+          address: data.value.address
+        }));
+        first = false;
+      }).on('finish', () => {
+        res.write(']');
+        res.end();
+      });
+      req.on('close', () => {
+        console.log("cancelled by user. destroying");
+        stream['destroy']();
+        console.log("destroyed");
+      });
     }  
   };
 
@@ -142,7 +237,6 @@ export class ClusterController {
   largestClusters = async (req:Request, res:Response) => {
     res.contentType('application/json');
     let n: number = Number(req.params.n);
-    let result = [];
     res.write('[');
     let first = true;
     let stream = this.balanceToClusterTable.createReadStream({reverse: true, limit: n})

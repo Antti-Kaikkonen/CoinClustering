@@ -14,7 +14,13 @@ rest=1
 <details>
  <summary>GET /clusters/:id/summary</summary>
 
+# Query parameters
+* after (optional)
+* limit (optional)
+# Example
+## Request
 `/clusters/867498/summary`
+## Response
 ``` json
 {
   "balance": 0,
@@ -35,7 +41,13 @@ rest=1
 <details>
  <summary>GET /clusters/:id/transactions</summary>
 
+# Query parameters
+* after (optional)
+* limit (optional)
+# Example
+## Request
 `/clusters/867498/transactions`
+## Response
 ``` json
 [
   {

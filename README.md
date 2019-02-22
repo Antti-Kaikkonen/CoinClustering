@@ -14,9 +14,6 @@ rest=1
 <details>
  <summary>GET /clusters/:id/summary</summary>
 
-# Query parameters
-* after (optional)
-* limit (optional)
 # Example
 ## Request
 `/clusters/867498/summary`
@@ -76,12 +73,27 @@ rest=1
 <details>
  <summary>GET /clusters/:id/addresses</summary>
 
+# Query parameters
+* after (optional)
+* limit (optional)
+# Example
+## Request
 `/clusters/867498/addresses`
+## Response
 ``` json
 [
-  "Lg1a7xRpiyMVAKvhLCrh78TEg1SLrVt2Eg",
-  "LZvdRoB5LWPdodp8qsWLudgYZ4cFQ9syCx",
-  "LXQUw5bQvuGFjf9uMR3dey8zLK8v2NkW8N"
+  {
+    "addressIndex": 0,
+    "address": "Lg1a7xRpiyMVAKvhLCrh78TEg1SLrVt2Eg"
+  },
+  {
+    "addressIndex": 1,
+    "address": "LZvdRoB5LWPdodp8qsWLudgYZ4cFQ9syCx"
+  },
+  {
+    "addressIndex": 2,
+    "address": "LXQUw5bQvuGFjf9uMR3dey8zLK8v2NkW8N"
+  }  
 ]
 ```
 </details>

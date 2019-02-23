@@ -6,7 +6,7 @@ export default function(clusterController: ClusterController): Router {
   router.get("/:id/transactions", clusterController.clusterTransactions);
   router.get('/:id/addresses', clusterController.clusterAddresses);
   router.get('/:id/summary', clusterController.clusterInfo);
-  router.get('/top-:n', clusterController.largestClusters);
+  router.get('', clusterController.largestClusters);
   router.get('/tx/:txid', clusterController.txClusterBalnaceChanges);
   return router;
 }

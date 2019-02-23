@@ -236,10 +236,44 @@ export class ClusterController {
 
   largestClusters = async (req:Request, res:Response) => {
     res.contentType('application/json');
-    let n: number = Number(req.params.n);
+
+    let limit = req.query.limit !== undefined ? Number(req.query.limit) : 100;
+    if (!Number.isInteger(limit) || limit <= 0 || limit > 1000) {
+      res.sendStatus(400);
+      return;
+    }
+
+
+    let afterBalance: number;
+    let afterCluster: number;
+    if (req.query.after !== undefined) {
+      let afterComponents = req.query.after.split('-');
+      if (afterComponents.length > 2) {
+        res.sendStatus(400);
+        return;
+      }
+      afterBalance = Number(afterComponents[0]);
+      if (!Number.isInteger(afterBalance) || afterBalance < 0) {
+        res.sendStatus(400);
+        return;
+      }
+      if (afterComponents.length === 2) {
+        afterCluster = Number(afterComponents[1]);
+        if (!Number.isInteger(afterCluster) || afterCluster < 0) {
+          res.sendStatus(400);
+          return;
+        }
+      }
+    }
+
+    let lt;
+    if (afterBalance) {
+      lt = {balance: afterBalance, clusterId: afterCluster};
+    }
+
     res.write('[');
     let first = true;
-    let stream = this.balanceToClusterTable.createReadStream({reverse: true, limit: n})
+    let stream = this.balanceToClusterTable.createReadStream({reverse: true, lt: lt, limit: limit})
     .on('data', (data) => {
       if (!first) res.write(",");
       res.write(JSON.stringify({

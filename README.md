@@ -12,6 +12,41 @@ rest=1
 
 ### Clusters
 <details>
+ <summary>GET /clusters</summary>
+
+# Query parameters
+* after (optional)
+* limit (optional)
+# Example
+## Request
+`/clusters?limit=5`
+## Response
+``` json
+[
+  {
+    "clusterId": 34737550,
+    "balance": 116069306126068
+  },
+  {
+    "clusterId": 3406070,
+    "balance": 99398189164815
+  },
+  {
+    "clusterId": 15450407,
+    "balance": 89713539855629
+  },
+  {
+    "clusterId": 15419485,
+    "balance": 89707097731123
+  },
+  {
+    "clusterId": 15449624,
+    "balance": 89552106923194
+  }
+]
+```
+</details>
+<details>
  <summary>GET /clusters/:id/summary</summary>
 
 # Example
@@ -97,39 +132,10 @@ rest=1
 ]
 ```
 </details>
-<details>
- <summary>GET /clusters/top-:n</summary>
-
-`clusters/top-5`
-``` json
-[
-  {
-    "clusterId": 34737550,
-    "balance": 116069306126068
-  },
-  {
-    "clusterId": 3406070,
-    "balance": 99398189164815
-  },
-  {
-    "clusterId": 15450407,
-    "balance": 89713539855629
-  },
-  {
-    "clusterId": 15419485,
-    "balance": 89707097731123
-  },
-  {
-    "clusterId": 15449624,
-    "balance": 89552106923194
-  }
-]
-```
-</details>
 
 ### Addresses
 <details>
- <summary>addresses/:address/cluster_id</summary>
+ <summary>GET /addresses/:address/cluster_id</summary>
 
 `/addresses/Lg1a7xRpiyMVAKvhLCrh78TEg1SLrVt2Eg/cluster_id`
 ``` json

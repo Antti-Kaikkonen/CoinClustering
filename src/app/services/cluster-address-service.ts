@@ -1,4 +1,7 @@
+import { ClusterAddress } from '../models/cluster-address';
+import { AddressBalanceTable } from '../tables/address-balance-table';
 import { AddressClusterTable } from '../tables/address-cluster-table';
+import { AddressTransactionTable } from '../tables/address-transaction-table';
 import { ClusterAddressCountTable } from '../tables/cluster-address-count-table';
 import { ClusterAddressTable } from '../tables/cluster-address-table';
 import { NextClusterIdTable } from '../tables/next-cluster-id-table';
@@ -11,13 +14,28 @@ export class ClusterAddressService {
   clusterAddressCountTable: ClusterAddressCountTable;
   nextClusterIdTable: NextClusterIdTable;
   addressClusterTable: AddressClusterTable;
+  addressBalanceTable: AddressBalanceTable;
+  addressTransactionTable: AddressTransactionTable;
 
   constructor(private db: BinaryDB, addressEncodingService: AddressEncodingService) {
     this.clusterAddressTable = new ClusterAddressTable(db, addressEncodingService);
     this.clusterAddressCountTable = new ClusterAddressCountTable(db);
     this.nextClusterIdTable = new NextClusterIdTable(db);
     this.addressClusterTable = new AddressClusterTable(db, addressEncodingService);
+    this.addressBalanceTable = new AddressBalanceTable(db, addressEncodingService);
+    this.addressTransactionTable = new AddressTransactionTable(db, addressEncodingService);
   }  
+
+  async getAddressBalance(address: string): Promise<number> {
+    try {
+      return (await this.addressBalanceTable.get({address: address})).balance;
+    } catch(err) {
+      if (err.notFound) {
+        return undefined;
+      }
+      throw err;
+    }  
+  }
 
   async getAddressCluster(address: string): Promise<number> {
     return (await this.addressClusterTable.get({address: address})).clusterId;
@@ -34,14 +52,15 @@ export class ClusterAddressService {
     }
   }
 
-  async getClusterAddresses(clusterId: number): Promise<string[]> {
-    return new Promise<string[]>((resolve, reject) => {
-      let addresses: string[] = [];
+  async getClusterAddresses(clusterId: number): Promise<ClusterAddress[]> {
+    return new Promise<ClusterAddress[]>((resolve, reject) => {
+      let addresses: ClusterAddress[] = [];
       this.clusterAddressTable.createReadStream({
-        gte: {clusterId: clusterId, addressIndex: 0},
-        lt: {clusterId: clusterId, addressIndex: Number.MAX_SAFE_INTEGER}
+        gte: {clusterId: clusterId},
+        lt: {clusterId: clusterId+1}
       }).on('data', function (data) {
-        addresses.push(data.value.address);
+        let ca = new ClusterAddress(data.key.balance, data.key.address);
+        addresses.push(ca);
       })
       .on('error', function (err) {
         reject(err);
@@ -58,26 +77,27 @@ export class ClusterAddressService {
     if (fromClusterIds.length === 0 && (nonClusterAddresses === undefined || nonClusterAddresses.length === 0)) return;
     let promises: Promise<any>[] = [];
     promises.push(this.getAddressCount(toClusterId));
-
     fromClusterIds.forEach(fromClusterId => {
       promises.push(this.getClusterAddresses(fromClusterId));
     });
     let values = await Promise.all(promises);
     let nextIndex = values[0];
-
     for (let clusterIndex = 0; clusterIndex < fromClusterIds.length; clusterIndex++) {
       let fromClusterId = fromClusterIds[clusterIndex];
-      let addresses: string[] = values[1+clusterIndex];
+      let addresses: ClusterAddress[] = values[1+clusterIndex];
       for (let addressIndex = 0; addressIndex < addresses.length; addressIndex++) {
         let address = addresses[addressIndex];
         await this.db.writeBatchService.push(
-          this.clusterAddressTable.putOperation({clusterId: toClusterId, addressIndex: nextIndex}, {address: address})
+          this.clusterAddressTable.putOperation({clusterId: toClusterId, balance: address.balance, address: address.address}, {})
+          //this.clusterAddressTable.putOperation({clusterId: toClusterId, addressIndex: nextIndex}, {address: address})
         );
         await this.db.writeBatchService.push(
-          this.clusterAddressTable.delOperation({clusterId: fromClusterId, addressIndex: addressIndex})
+          this.clusterAddressTable.delOperation({clusterId: fromClusterId, balance: address.balance, address: address.address})
+          //this.clusterAddressTable.delOperation({clusterId: fromClusterId, addressIndex: addressIndex})
         );
         await this.db.writeBatchService.push(
-          this.addressClusterTable.putOperation({address: address}, {clusterId: toClusterId})
+          this.addressClusterTable.putOperation({address: address.address}, {clusterId: toClusterId})
+          //this.addressClusterTable.putOperation({address: address}, {clusterId: toClusterId})
         );
         nextIndex++;
       };
@@ -105,7 +125,8 @@ export class ClusterAddressService {
     }
     for (const [index, address] of addresses.entries()) {
       let newIndex: number = Number(oldClusterAddressCount)+index;
-      await this.db.writeBatchService.push(this.clusterAddressTable.putOperation({clusterId: clusterId, addressIndex: newIndex}, {address: address}));
+      await this.db.writeBatchService.push(this.clusterAddressTable.putOperation({clusterId: clusterId, balance: 0, address: address}, {}));
+      //await this.db.writeBatchService.push(this.clusterAddressTable.putOperation({clusterId: clusterId, addressIndex: newIndex}, {address: address}));
       await this.db.writeBatchService.push(this.addressClusterTable.putOperation({address: address}, {clusterId: clusterId}));
     };
   }
@@ -122,7 +143,8 @@ export class ClusterAddressService {
     );
     for (const [index, address] of clusterAddresses.entries()) {
       await this.db.writeBatchService.push(
-        this.clusterAddressTable.putOperation({clusterId, addressIndex: index}, {address: address})
+        this.clusterAddressTable.putOperation({clusterId, balance: 0, address: address}, {})
+        //this.clusterAddressTable.putOperation({clusterId, addressIndex: index}, {address: address})
       );
       await this.db.writeBatchService.push(
         this.addressClusterTable.putOperation({address: address}, {clusterId: clusterId})

@@ -142,10 +142,26 @@ export class ClusterController {
       return;
     }
 
-    let after: number = req.query.after !== undefined ? Number(req.query.after) : undefined;
-    if (after !== undefined && (!Number.isInteger(after) || after < 0)) {
-      res.sendStatus(400);
-      return;
+    let afterBalance: number;
+    let afterAdddress: string;
+    if (req.query.after !== undefined) {
+      let afterComponents = req.query.after.split('-');
+      if (afterComponents.length > 2) {
+        res.sendStatus(400);
+        return;
+      }
+      afterBalance = Number(afterComponents[0]);
+      if (!Number.isInteger(afterBalance) || afterBalance < 0) {
+        res.sendStatus(400);
+        return;
+      }
+      if (afterComponents.length === 2) {
+        afterAdddress = afterComponents[1];
+        if (afterAdddress.length === 0) {
+          res.sendStatus(400);
+          return;
+        }
+      }
     }
 
     let redirectToCluster = await this.redirectToCluster(clusterId);
@@ -153,20 +169,29 @@ export class ClusterController {
       let newPath = req.baseUrl+req.route.path.replace(':id', redirectToCluster);
       res.redirect(301, newPath);
     } else {
+      let lt;
+      if (afterBalance !== undefined) {
+        lt = {clusterId: clusterId, balance: afterBalance, address: afterAdddress};
+      } else {
+        lt = {clusterId: clusterId+1};
+      }
+      console.log("lt", lt);
+
       res.contentType('application/json');
       res.write('[');
       let first = true;
-      
+    
       let stream = this.clusterAddressTable.createReadStream({
-        gt: {clusterId: clusterId, addressIndex: after},
-        lt: {clusterId: clusterId+1},
-        limit: limit
+        gt: {clusterId: clusterId},
+        lt: lt,
+        limit: limit,
+        reverse: true
       });
       stream.on('data', (data) => {
         if (!first) res.write(",");
         res.write(JSON.stringify({
-          adressIndex: data.key.addressIndex,
-          address: data.value.address
+          balance: data.key.balance,
+          address: data.key.address
         }));
         first = false;
       }).on('finish', () => {

@@ -5,7 +5,7 @@ export const db_address_cluster_prefix = Buffer.alloc(1, 2);//prefix/address => 
 export const db_cluster_transaction_prefix = Buffer.alloc(1, 3);// prefix/varint(clusterid)/lexint(#) => txid/varint(balanceAfter) (order # by 1:height, 2:index in block)
 export const db_cluster_transaction_count_prefix = Buffer.alloc(1, 4);//prefix/varint(clusterid) => varint(count);
 export const db_address_balance_prefix = Buffer.alloc(1, 5);// prefix/address/lexint(#) => txid/varint(balanceAfter)/varint(height)/varint(n) (order # by 1:height, 2:index in block)
-export const db_address_tx_balance_prefix = Buffer.alloc(1, 6);// prefix/address/txid => varint(#)/varint(balanceAfter)/varint(height)/varint(n)
+export const db_address_transaction_prefix = Buffer.alloc(1, 6);// prefix/address/txid => varint(#)/varint(balanceAfter)/varint(height)/varint(n)
 export const db_address_balance_count_prefix = Buffer.alloc(1, 7); //predfix/address => varint(count)
 export const db_next_cluster_id = Buffer.alloc(1, 8);// prefix/varint(id)
 export const db_block_hash = Buffer.alloc(1, 9);//prefix/height => hash

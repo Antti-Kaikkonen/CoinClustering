@@ -81,10 +81,8 @@ async function doProcessing() {
     console.log("merging between blocks", startHeight, "and", toHeight);
     blockWriter = new Writable({
       objectMode: true,
-      //highWaterMark: 256,
       write: async (block: BlockWithTransactions, encoding, callback) => {
         await blockImportService.blockMerging(block);
-        //if (lastSavedTxHeight === -1) deleteBlockInputs(block);
         callback(null);
       }
     });
@@ -94,10 +92,8 @@ async function doProcessing() {
     console.log("saving transactions between blocks", startHeight, "and", toHeight);
     blockWriter = new Writable({
       objectMode: true,
-      //highWaterMark: 256,
       write: async (block: BlockWithTransactions, encoding, callback) => {
         await blockImportService.saveBlockTransactionsAsync(block);
-        //deleteBlockInputs(block);
         callback(null);
       }
     });

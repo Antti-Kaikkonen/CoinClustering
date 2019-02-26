@@ -47,7 +47,7 @@ export class ClusterBuilder {
           if (intersectingCluster === newCluster) continue;
           this.mergeClusters(intersectingCluster, newCluster);
         } else {
-          newCluster.clusterIds.add(clusterId);
+          newCluster.clusterIds.push(clusterId);
           this.clusterIdToCluster.set(clusterId, newCluster);
         }
       } else {
@@ -58,9 +58,9 @@ export class ClusterBuilder {
           this.mergeClusters(intersectingCluster, newCluster);
         } else {
           if (!shouldCluster) {
-            this.clusterAddressToCluster.set(address, new Cluster(new Set([address])));
+            this.clusterAddressToCluster.set(address, new Cluster([address]));
           } else {
-            newCluster.addresses.add(address);
+            newCluster.addresses.push(address);
             this.clusterAddressToCluster.set(address, newCluster);
           }
         }  

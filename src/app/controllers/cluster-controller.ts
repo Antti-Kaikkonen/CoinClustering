@@ -49,6 +49,8 @@ export class ClusterController {
     let redirectToCluster = await this.redirectToCluster(clusterId);
     if (redirectToCluster !== undefined) {
       let newPath = req.baseUrl+req.route.path.replace(':id', redirectToCluster);
+      let queryPos = req.url.indexOf("?");
+      if (queryPos >= 0) newPath += req.url.substr(queryPos);
       res.redirect(301, newPath);
     } else {
       let addressCountPromise = this.clusterAddressService.getAddressCount(clusterId);
@@ -103,6 +105,8 @@ export class ClusterController {
     let redirectToCluster = await this.redirectToCluster(clusterId);
     if (redirectToCluster !== undefined) {
       let newPath = req.baseUrl+req.route.path.replace(':id', redirectToCluster);
+      let queryPos = req.url.indexOf("?");
+      if (queryPos >= 0) newPath += req.url.substr(queryPos);
       res.redirect(301, newPath);
     } else {
       res.contentType('application/json');
@@ -163,10 +167,11 @@ export class ClusterController {
         }
       }
     }
-
     let redirectToCluster = await this.redirectToCluster(clusterId);
     if (redirectToCluster !== undefined) {
       let newPath = req.baseUrl+req.route.path.replace(':id', redirectToCluster);
+      let queryPos = req.url.indexOf("?");
+      if (queryPos >= 0) newPath += req.url.substr(queryPos);
       res.redirect(301, newPath);
     } else {
       let lt;
@@ -175,7 +180,6 @@ export class ClusterController {
       } else {
         lt = {clusterId: clusterId+1};
       }
-      console.log("lt", lt);
 
       res.contentType('application/json');
       res.write('[');

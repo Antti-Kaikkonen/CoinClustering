@@ -5,18 +5,19 @@ import rocksDB from 'rocksdb';
 import { Writable } from 'stream';
 import { AddressController } from './app/controllers/address-controller';
 import { ClusterController } from './app/controllers/cluster-controller';
+import { TransactionController } from './app/controllers/transaction-controller';
 import RestApi from './app/misc/rest-api';
 import RpcApi from './app/misc/rpc-api';
 import { BlockWithTransactions } from './app/models/block';
 import addressRoutes from './app/routes/address';
 import clusterRoutes from './app/routes/cluster';
+import transactionRoutes from './app/routes/transaction';
 import { AddressEncodingService } from './app/services/address-encoding-service';
 import { BinaryDB } from './app/services/binary-db';
 import { BlockImportService } from './app/services/block-import-service';
 import { BlockchainReader } from './app/services/blockchain-reader';
 import { ClusterAddressService } from './app/services/cluster-address-service';
 import { ClusterTransactionService } from './app/services/cluster-transaction-service';
-import { OutputCacheTable } from './app/tables/output-cache-table';
 
 
 
@@ -46,13 +47,13 @@ let clusterBalanceService = new ClusterTransactionService(db);
 
 let clusterAddressService = new ClusterAddressService(db, addressEncodingService);
 
-let clusterController = new ClusterController(db, addressEncodingService, rpcApi);
+let clusterController = new ClusterController(db, addressEncodingService);
 
 let addressController = new AddressController(db, addressEncodingService);
 
-let blockImportService = new BlockImportService(db, clusterAddressService, clusterBalanceService, addressEncodingService);
+let transactionController = new TransactionController(db, addressEncodingService, rpcApi);
 
-let outputCacheTable = new OutputCacheTable(db, addressEncodingService);
+let blockImportService = new BlockImportService(db, clusterAddressService, clusterBalanceService, addressEncodingService);
 
 let blockchainReader = new BlockchainReader(restApi, rpcApi, addressEncodingService, db);
 
@@ -61,6 +62,7 @@ app.use(cors());
 
 app.use('/clusters', clusterRoutes(clusterController));
 app.use('/addresses', addressRoutes(addressController));
+app.use('/tx', transactionRoutes(transactionController));
 app.listen(config.listen_port);
 
 const stay_behind_blocks = 100;

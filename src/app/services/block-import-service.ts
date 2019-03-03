@@ -151,6 +151,7 @@ export class BlockImportService {
     let clusterIdToBalancePromise: Map<number, Promise<number>> = new Map();
     let allAddressesResolved: Promise<void> = new Promise((resolve, reject) => {
       let addressesToReolve: number = blockAddressesArray.length*2;
+      if (addressesToReolve === 0) resolve();
       blockAddressesArray.forEach(address => {
         this.clusterAddressService.getAddressBalance(address).then(balance => {
           addressToBalance.set(address, balance);

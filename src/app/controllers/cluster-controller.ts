@@ -1,13 +1,9 @@
 import { Request, Response } from 'express';
-import RpcApi from '../misc/rpc-api';
-import { txAddressBalanceChanges } from '../misc/utils';
 import { ClusterTransaction } from '../models/cluster-transaction';
-import { Transaction } from '../models/transaction';
 import { AddressEncodingService } from '../services/address-encoding-service';
 import { BinaryDB } from '../services/binary-db';
 import { ClusterAddressService } from '../services/cluster-address-service';
 import { ClusterTransactionService } from '../services/cluster-transaction-service';
-import { AddressClusterTable } from '../tables/address-cluster-table';
 import { BalanceToClusterTable } from '../tables/balance-to-cluster-table';
 import { ClusterAddressTable } from '../tables/cluster-address-table';
 import { ClusterMergedToTable } from '../tables/cluster-merged-to-table';
@@ -19,16 +15,14 @@ export class ClusterController {
   private clusterTransactionService: ClusterTransactionService;
   private clusterAddressService: ClusterAddressService;
   private balanceToClusterTable: BalanceToClusterTable;
-  private addressClusterTable: AddressClusterTable;
   private clusterMergedToTable: ClusterMergedToTable;
   private clusterTransactionTable: ClusterTransactionTable;
   private clusterAddressTable: ClusterAddressTable;
 
-  constructor(private db: BinaryDB, addressEncodingService: AddressEncodingService, private rpcApi: RpcApi) {
+  constructor(private db: BinaryDB, addressEncodingService: AddressEncodingService) {
     this.clusterTransactionService = new ClusterTransactionService(db);
     this.clusterAddressService = new ClusterAddressService(db, addressEncodingService);
     this.balanceToClusterTable = new BalanceToClusterTable(db);
-    this.addressClusterTable = new AddressClusterTable(db, addressEncodingService);
     this.clusterMergedToTable = new ClusterMergedToTable(db);
     this.clusterTransactionTable = new ClusterTransactionTable(db);
     this.clusterAddressTable = new ClusterAddressTable(db, addressEncodingService);
@@ -71,6 +65,21 @@ export class ClusterController {
     }  
   }
 
+  private decodeHeightAndNToken(clusterId: number, str?: string): {clusterId: number, height: number, n?: number} {
+    if (str === undefined) return;
+    let components = str.split('-');
+    if (components.length > 2) throw new Error("Too many components");
+    let height = Number(components[0]);
+    if (!Number.isInteger(height) || height < 0) throw new Error("Invalid height");
+    let n;
+    if (components.length === 2) {
+      n = Number(components[1]);
+      if (!Number.isInteger(n) || n < 0) throw new Error("Invalid n");
+    }
+    return {clusterId: clusterId, height: height, n: n};
+
+  }
+
   clusterTransactions = async (req:Request, res:Response) => {
     let clusterId: number = Number(req.params.id);
 
@@ -80,27 +89,23 @@ export class ClusterController {
       return;
     }
 
-    let afterBlock: number;
-    let afterTxN: number;
-    if (req.query.after !== undefined) {
-      let afterComponents = req.query.after.split('-');
-      if (afterComponents.length > 2) {
-        res.sendStatus(400);
-        return;
-      }
-      afterBlock = Number(afterComponents[0]);
-      if (!Number.isInteger(afterBlock) || afterBlock < 0) {
-        res.sendStatus(400);
-        return;
-      }
-      if (afterComponents.length === 2) {
-        afterTxN = Number(afterComponents[1]);
-        if (!Number.isInteger(afterTxN) || afterTxN < 0) {
-          res.sendStatus(400);
-          return;
-        }
-      }
+    let options;
+    try {
+      options = {
+        reverse: req.query.reverse === "true",
+        lt: this.decodeHeightAndNToken(clusterId, req.query.lt), 
+        lte: this.decodeHeightAndNToken(clusterId, req.query.lte), 
+        gt: this.decodeHeightAndNToken(clusterId, req.query.gt), 
+        gte: this.decodeHeightAndNToken(clusterId, req.query.gte),
+        limit: limit,
+        fillCache: true
+      };
+    } catch(err) {
+      res.sendStatus(400);
+      return;
     }
+    if (!options.lt && !options.lte) options.lt = {clusterId: clusterId+1};
+    if (!options.gt && !options.gte) options.gt = {clusterId: clusterId};
 
     let redirectToCluster = await this.redirectToCluster(clusterId);
     if (redirectToCluster !== undefined) {
@@ -112,11 +117,7 @@ export class ClusterController {
       res.contentType('application/json');
       res.write('[');
       let first = true;
-      let stream = this.clusterTransactionTable.createReadStream({
-        gt: {clusterId: clusterId, height: afterBlock, n: afterTxN},
-        lt: {clusterId: clusterId+1},
-        limit: limit
-      });
+      let stream = this.clusterTransactionTable.createReadStream(options);
       stream.on('data', (data) => {
         if (!first) res.write(",");
         res.write(JSON.stringify(new ClusterTransaction(
@@ -137,6 +138,20 @@ export class ClusterController {
     }
   };
 
+  private decodeBalanceAndAddressToken(clusterId: number, str?: string): {clusterId: number, balance: number, address?: string} {
+    if (str === undefined) return;
+    let components = str.split('-');
+    if (components.length > 2) throw new Error("Too many components");
+    let balance = Number(components[0]);
+    if (!Number.isInteger(balance) || balance < 0) throw new Error("Invalid balance");
+    let address;
+    if (components.length === 2) {
+      address = components[1];
+    }
+    return {clusterId: clusterId, balance: balance, address: address};
+
+  }
+
   clusterAddresses = async (req:Request, res:Response) => {
     let clusterId: number = Number(req.params.id);
 
@@ -146,27 +161,24 @@ export class ClusterController {
       return;
     }
 
-    let afterBalance: number;
-    let afterAdddress: string;
-    if (req.query.after !== undefined) {
-      let afterComponents = req.query.after.split('-');
-      if (afterComponents.length > 2) {
-        res.sendStatus(400);
-        return;
-      }
-      afterBalance = Number(afterComponents[0]);
-      if (!Number.isInteger(afterBalance) || afterBalance < 0) {
-        res.sendStatus(400);
-        return;
-      }
-      if (afterComponents.length === 2) {
-        afterAdddress = afterComponents[1];
-        if (afterAdddress.length === 0) {
-          res.sendStatus(400);
-          return;
-        }
-      }
+    let options;
+    try {
+      options = {
+        reverse: req.query.reverse === "true",
+        lt: this.decodeBalanceAndAddressToken(clusterId, req.query.lt), 
+        lte: this.decodeBalanceAndAddressToken(clusterId, req.query.lte), 
+        gt: this.decodeBalanceAndAddressToken(clusterId, req.query.gt), 
+        gte: this.decodeBalanceAndAddressToken(clusterId, req.query.gte),
+        limit: limit,
+        fillCache: true
+      };
+    } catch(err) {
+      res.sendStatus(400);
+      return;
     }
+    if (!options.lt && !options.lte) options.lt = {clusterId: clusterId+1};
+    if (!options.gt && !options.gte) options.gt = {clusterId: clusterId};
+
     let redirectToCluster = await this.redirectToCluster(clusterId);
     if (redirectToCluster !== undefined) {
       let newPath = req.baseUrl+req.route.path.replace(':id', redirectToCluster);
@@ -174,23 +186,12 @@ export class ClusterController {
       if (queryPos >= 0) newPath += req.url.substr(queryPos);
       res.redirect(301, newPath);
     } else {
-      let lt;
-      if (afterBalance !== undefined) {
-        lt = {clusterId: clusterId, balance: afterBalance, address: afterAdddress};
-      } else {
-        lt = {clusterId: clusterId+1};
-      }
 
       res.contentType('application/json');
       res.write('[');
       let first = true;
     
-      let stream = this.clusterAddressTable.createReadStream({
-        gt: {clusterId: clusterId},
-        lt: lt,
-        limit: limit,
-        reverse: true
-      });
+      let stream = this.clusterAddressTable.createReadStream(options);
       stream.on('data', (data) => {
         if (!first) res.write(",");
         res.write(JSON.stringify({
@@ -210,58 +211,20 @@ export class ClusterController {
     }  
   };
 
-  private async addressBalanceChangesToClusterBalanceChanges(addressToDelta: Map<string, number>): Promise<Map<number, number>> {
-    let promises = [];
-    let addresses = [];
-    addressToDelta.forEach((delta: number, address: string) => {
-      addresses.push(address);
-      promises.push(this.addressClusterTable.get({address: address}));
-    });
-    let clusterIds = await Promise.all(promises);
-    let clusterToDelta = new Map<number, number>();
-    addresses.forEach((address: string, index: number) => {
-      let clusterId: number = clusterIds[index].clusterId;
-      if (clusterId === undefined) throw Error("Cluster missing");
-      let oldBalance = clusterToDelta.get(clusterId);
-      let addressDelta = addressToDelta.get(address);
-      if (!oldBalance) oldBalance = 0;
-      clusterToDelta.set(clusterId, oldBalance+addressDelta);
-    });
-    return clusterToDelta;
+  private decodeBalanceClusterIdToken(str?: string): {balance: number, clusterId?: number} {
+    if (str === undefined) return;
+    let components = str.split('-');
+    if (components.length > 2) throw new Error("Too many components");
+    let balance = Number(components[0]);
+    if (!Number.isInteger(balance) || balance < 0) throw new Error("Invalid balance");
+    let clusterId;
+    if (components.length === 2) {
+      clusterId = Number(components[1]);
+      if (!Number.isInteger(clusterId) || clusterId < 0) throw new Error("Invalid clusterId");
+    }
+    return {balance: balance, clusterId: clusterId};
+
   }
-
-  txClusterBalnaceChanges = async (req:Request, res:Response) => {
-    let txid: string = req.params.txid;
-    let tx: Transaction = (await this.rpcApi.getTransactions([txid]))[0];
-    let txids: Set<string> = new Set();
-    tx.vin.forEach(vin => {
-      if (vin.coinbase) return;
-      if (!vin.address) {
-        txids.add(vin.txid);
-      }
-    });
-    let txs = await this.rpcApi.getTransactions(Array.from(txids));
-    let txidToTx: Map<string, Transaction> = new Map();
-    txs.forEach(tx => txidToTx.set(tx.txid, tx));
-    tx.vin.forEach(vin => {
-      if (vin.coinbase) return;
-      if (!vin.address) {
-        let vout = txidToTx.get(vin.txid).vout[vin.vout];
-        if (vout.scriptPubKey.addresses.length === 1) {
-          vin.address = vout.scriptPubKey.addresses[0];
-        }
-        vin.value = vout.value;
-      }
-    });
-    let balanceChanges: Map<string, number> = txAddressBalanceChanges(tx);
-    let clusterBalanceChanges = await this.addressBalanceChangesToClusterBalanceChanges(balanceChanges);
-    let result = {};
-    clusterBalanceChanges.forEach((delta: number, clusterId: number) => {
-      result[clusterId] = delta;
-    });
-    res.send(result);
-  }  
-
 
   largestClusters = async (req:Request, res:Response) => {
     res.contentType('application/json');
@@ -272,37 +235,25 @@ export class ClusterController {
       return;
     }
 
-
-    let afterBalance: number;
-    let afterCluster: number;
-    if (req.query.after !== undefined) {
-      let afterComponents = req.query.after.split('-');
-      if (afterComponents.length > 2) {
-        res.sendStatus(400);
-        return;
-      }
-      afterBalance = Number(afterComponents[0]);
-      if (!Number.isInteger(afterBalance) || afterBalance < 0) {
-        res.sendStatus(400);
-        return;
-      }
-      if (afterComponents.length === 2) {
-        afterCluster = Number(afterComponents[1]);
-        if (!Number.isInteger(afterCluster) || afterCluster < 0) {
-          res.sendStatus(400);
-          return;
-        }
-      }
-    }
-
-    let lt;
-    if (afterBalance) {
-      lt = {balance: afterBalance, clusterId: afterCluster};
+    let options;
+    try {
+      options = {
+        reverse: req.query.reverse === "true",
+        lt: this.decodeBalanceClusterIdToken(req.query.lt), 
+        lte: this.decodeBalanceClusterIdToken(req.query.lte), 
+        gt: this.decodeBalanceClusterIdToken(req.query.gt), 
+        gte: this.decodeBalanceClusterIdToken(req.query.gte),
+        limit: limit,
+        fillCache: true
+      };
+    } catch(err) {
+      res.sendStatus(400);
+      return;
     }
 
     res.write('[');
     let first = true;
-    let stream = this.balanceToClusterTable.createReadStream({reverse: true, lt: lt, limit: limit})
+    let stream = this.balanceToClusterTable.createReadStream(options)
     .on('data', (data) => {
       if (!first) res.write(",");
       res.write(JSON.stringify({

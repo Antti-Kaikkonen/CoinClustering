@@ -15,7 +15,8 @@ rest=1
  <summary>GET /clusters</summary>
 
 # Query parameters
-* after (optional)
+* gt, gte, lt, lte (optional)
+* reverse (optional)
 * limit (optional)
 # Example
 ## Request
@@ -74,7 +75,8 @@ rest=1
  <summary>GET /clusters/:id/transactions</summary>
 
 # Query parameters
-* after (optional)
+* gt, gte, lt, lte (optional)
+* reverse (optional)
 * limit (optional)
 # Example
 ## Request
@@ -109,7 +111,8 @@ rest=1
  <summary>GET /clusters/:id/addresses</summary>
 
 # Query parameters
-* after (optional)
+* gt, gte, lt, lte (optional)
+* reverse (optional)
 * limit (optional)
 # Example
 ## Request

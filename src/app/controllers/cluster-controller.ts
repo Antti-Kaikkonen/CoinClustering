@@ -1,4 +1,6 @@
 import { Request, Response } from 'express';
+import RpcApi from '../misc/rpc-api';
+import { txAddressBalanceChanges } from '../misc/utils';
 import { ClusterTransaction } from '../models/cluster-transaction';
 import { AddressEncodingService } from '../services/address-encoding-service';
 import { BinaryDB } from '../services/binary-db';
@@ -8,6 +10,7 @@ import { BalanceToClusterTable } from '../tables/balance-to-cluster-table';
 import { ClusterAddressTable } from '../tables/cluster-address-table';
 import { ClusterMergedToTable } from '../tables/cluster-merged-to-table';
 import { ClusterTransactionTable } from '../tables/cluster-transaction-table';
+import { OutputCacheTable } from '../tables/output-cache-table';
 
 
 export class ClusterController {
@@ -18,14 +21,16 @@ export class ClusterController {
   private clusterMergedToTable: ClusterMergedToTable;
   private clusterTransactionTable: ClusterTransactionTable;
   private clusterAddressTable: ClusterAddressTable;
+  private outputCacheTable: OutputCacheTable;
 
-  constructor(private db: BinaryDB, addressEncodingService: AddressEncodingService) {
+  constructor(db: BinaryDB, addressEncodingService: AddressEncodingService, private rpcApi: RpcApi) {
     this.clusterTransactionService = new ClusterTransactionService(db);
     this.clusterAddressService = new ClusterAddressService(db, addressEncodingService);
     this.balanceToClusterTable = new BalanceToClusterTable(db);
     this.clusterMergedToTable = new ClusterMergedToTable(db);
     this.clusterTransactionTable = new ClusterTransactionTable(db);
     this.clusterAddressTable = new ClusterAddressTable(db, addressEncodingService);
+    this.outputCacheTable = new OutputCacheTable(db, addressEncodingService);
   }  
 
 
@@ -80,6 +85,7 @@ export class ClusterController {
 
   }
 
+
   clusterTransactions = async (req:Request, res:Response) => {
     let clusterId: number = Number(req.params.id);
 
@@ -107,6 +113,8 @@ export class ClusterController {
     if (!options.lt && !options.lte) options.lt = {clusterId: clusterId+1};
     if (!options.gt && !options.gte) options.gt = {clusterId: clusterId};
 
+    
+
     let redirectToCluster = await this.redirectToCluster(clusterId);
     if (redirectToCluster !== undefined) {
       let newPath = req.baseUrl+req.route.path.replace(':id', redirectToCluster);
@@ -114,27 +122,78 @@ export class ClusterController {
       if (queryPos >= 0) newPath += req.url.substr(queryPos);
       res.redirect(301, newPath);
     } else {
-      res.contentType('application/json');
-      res.write('[');
-      let first = true;
-      let stream = this.clusterTransactionTable.createReadStream(options);
-      stream.on('data', (data) => {
-        if (!first) res.write(",");
-        res.write(JSON.stringify(new ClusterTransaction(
-          data.value.txid,
-          data.key.height,
-          data.key.n
-        )));
-        first = false;
-      }).on('finish', () => {
-        res.write(']');
-        res.end();
+      //res.contentType('application/json');
+      //res.write('[');
+      //let stream = this.clusterTransactionTable.createReadStream(options);
+
+      let clusterTransactions: ClusterTransaction[] = [];
+      try {
+        await new Promise((resolve, reject) => {
+          let stream = this.clusterTransactionTable.createReadStream(options);
+          stream.on('data', (data) => {
+            clusterTransactions.push(new ClusterTransaction(
+              data.value.txid,
+              data.key.height,
+              data.key.n
+            ));
+          }).on('finish', () => {
+            resolve();
+          });
+          req.on('close', () => {
+            console.log("cancelled by user. destroying");
+            stream['destroy']();
+            console.log("destroyed");
+            reject();
+          });
+        });
+      } catch(err) {
+        return;
+      }
+
+      if (req.query['include-delta'] !== "true") {
+        res.json(clusterTransactions);
+        return;
+      }
+
+      let rpcTransactions = await this.rpcApi.getTransactions(clusterTransactions.map(tx => tx.txid));
+
+      let attachInputsPromises = [];
+      rpcTransactions.forEach(tx => {
+        let attachInputsPromise = new Promise((resolve, reject) => {
+          let inputsToAttach = tx.vin.length;
+          if (inputsToAttach === 0) resolve();
+          tx.vin.forEach(vin => {
+            if (!vin.coinbase && !vin.address) {
+              this.outputCacheTable.get({txid: vin.txid, n: vin.vout}).then((value) => {
+                if (value.addresses.length === 1) {
+                  vin.address = value.addresses[0];
+                  vin.value = value.valueSat/1e8;
+                }
+                inputsToAttach--;
+                if (inputsToAttach === 0) resolve();
+              })
+            } else {
+              inputsToAttach--;
+              if (inputsToAttach === 0) resolve();
+            }
+          });
+        }); 
+        attachInputsPromises.push(attachInputsPromise);
       });
-      req.on('close', () => {
-        console.log("cancelled by user. destroying");
-        stream['destroy']();
-        console.log("destroyed");
+      await Promise.all(attachInputsPromises);
+      let clusterBalanceChangesPromises = [];
+      rpcTransactions.forEach(tx => {
+        let balanceChanges: Map<string, number> = txAddressBalanceChanges(tx);
+        clusterBalanceChangesPromises.push(this.clusterAddressService.addressBalanceChangesToClusterBalanceChanges(balanceChanges));
+      });  
+
+      let clusterBalanceChanges = await Promise.all(clusterBalanceChangesPromises);
+      clusterBalanceChanges.forEach((txClusterBalanceChanges, index) => {
+          let delta = txClusterBalanceChanges.get(clusterId);
+          let clusterTransaction = clusterTransactions[index];
+          clusterTransaction['delta'] = delta;
       });
+      res.json(clusterTransactions);
     }
   };
 

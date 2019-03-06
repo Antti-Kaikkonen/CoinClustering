@@ -4,6 +4,7 @@ import { txAddressBalanceChanges } from "../misc/utils";
 import { Transaction } from "../models/transaction";
 import { AddressEncodingService } from "../services/address-encoding-service";
 import { BinaryDB } from "../services/binary-db";
+import { ClusterAddressService } from "../services/cluster-address-service";
 import { AddressClusterTable } from "../tables/address-cluster-table";
 import { OutputCacheTable } from "../tables/output-cache-table";
 
@@ -12,31 +13,13 @@ export class TransactionController {
 
   private addressClusterTable: AddressClusterTable;
   private outputCacheTable: OutputCacheTable;
+  private clusterAddressService: ClusterAddressService;
 
   constructor(private db: BinaryDB, addressEncodingService: AddressEncodingService, private rpcApi: RpcApi) {
     this.addressClusterTable = new AddressClusterTable(db, addressEncodingService);
     this.outputCacheTable = new OutputCacheTable(this.db, addressEncodingService);
+    this.clusterAddressService = new ClusterAddressService(db, addressEncodingService);
   }  
-
-  private async addressBalanceChangesToClusterBalanceChanges(addressToDelta: Map<string, number>): Promise<Map<number, number>> {
-    let promises = [];
-    let addresses = [];
-    addressToDelta.forEach((delta: number, address: string) => {
-      addresses.push(address);
-      promises.push(this.addressClusterTable.get({address: address}));
-    });
-    let clusterIds = await Promise.all(promises);
-    let clusterToDelta = new Map<number, number>();
-    addresses.forEach((address: string, index: number) => {
-      let clusterId: number = clusterIds[index].clusterId;
-      if (clusterId === undefined) throw Error("Cluster missing");
-      let oldBalance = clusterToDelta.get(clusterId);
-      let addressDelta = addressToDelta.get(address);
-      if (!oldBalance) oldBalance = 0;
-      clusterToDelta.set(clusterId, oldBalance+addressDelta);
-    });
-    return clusterToDelta;
-  }
 
 
   txClusterBalnaceChanges = async (req:Request, res:Response) => {
@@ -63,7 +46,7 @@ export class TransactionController {
     }); 
     await attachInputsPromise;
     let balanceChanges: Map<string, number> = txAddressBalanceChanges(tx);
-    let clusterBalanceChanges = await this.addressBalanceChangesToClusterBalanceChanges(balanceChanges);
+    let clusterBalanceChanges = await this.clusterAddressService.addressBalanceChangesToClusterBalanceChanges(balanceChanges);
     let result = [];
     clusterBalanceChanges.forEach((delta: number, clusterId: number) => {
       result.push({

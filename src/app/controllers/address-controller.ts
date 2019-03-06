@@ -14,8 +14,12 @@ export class AddressController {
 
   clusterId = async (req:Request, res:Response) => {
     let address: string = req.params.address;
-    let clusterId = await this.clusterAddressService.getAddressCluster(address);
-    res.send(clusterId.toString());
+    try {
+      let clusterId = await this.clusterAddressService.getAddressCluster(address);
+      res.send(clusterId.toString());
+    } catch(err) {
+      res.sendStatus(404);
+    }
   };
 
 }  

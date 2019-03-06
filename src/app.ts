@@ -47,7 +47,7 @@ let clusterBalanceService = new ClusterTransactionService(db);
 
 let clusterAddressService = new ClusterAddressService(db, addressEncodingService);
 
-let clusterController = new ClusterController(db, addressEncodingService);
+let clusterController = new ClusterController(db, addressEncodingService, rpcApi);
 
 let addressController = new AddressController(db, addressEncodingService);
 

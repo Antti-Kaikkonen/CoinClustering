@@ -42,7 +42,7 @@ export default class RpcApi {
     batches.forEach(rawtxs => rawtxs.forEach(rawtx =>res.push(rawtx)));
     return res;
   }
-  
+
   async getRpcHeight(): Promise<number> {
     return new Promise<number>((resolve, reject) => {
       this.rpc.getBlockCount((err, res) => {

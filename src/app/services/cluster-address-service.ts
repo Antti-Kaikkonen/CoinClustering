@@ -52,6 +52,26 @@ export class ClusterAddressService {
     }
   }
 
+  async addressBalanceChangesToClusterBalanceChanges(addressToDelta: Map<string, number>): Promise<Map<number, number>> {
+    let promises = [];
+    let addresses = [];
+    addressToDelta.forEach((delta: number, address: string) => {
+      addresses.push(address);
+      promises.push(this.addressClusterTable.get({address: address}));
+    });
+    let clusterIds = await Promise.all(promises);
+    let clusterToDelta = new Map<number, number>();
+    addresses.forEach((address: string, index: number) => {
+      let clusterId: number = clusterIds[index].clusterId;
+      if (clusterId === undefined) throw Error("Cluster missing");
+      let oldBalance = clusterToDelta.get(clusterId);
+      let addressDelta = addressToDelta.get(address);
+      if (!oldBalance) oldBalance = 0;
+      clusterToDelta.set(clusterId, oldBalance+addressDelta);
+    });
+    return clusterToDelta;
+  }
+
   async getClusterAddresses(clusterId: number): Promise<ClusterAddress[]> {
     return new Promise<ClusterAddress[]>((resolve, reject) => {
       let addresses: ClusterAddress[] = [];

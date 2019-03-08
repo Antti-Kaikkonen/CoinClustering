@@ -6,6 +6,12 @@ import { BinaryDB } from "./binary-db";
 
 const BATCH_SIZE: number = 1000000;
 
+/**
+ * LevelDB and RocksDB process WriteBatch in memory. 
+ * The purpose of this class is to allow large WriteBatch operations to spill to disk in order to limit memory usage. 
+ * TODO: lock the db before splilling to disk and unlock when fully processed.
+ */
+
 export class WriteBatchService {
 
   ops: AbstractBatch<Buffer, Buffer>[];

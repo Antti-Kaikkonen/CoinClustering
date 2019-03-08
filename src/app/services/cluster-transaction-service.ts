@@ -16,31 +16,7 @@ export class ClusterTransactionService {
     this.clusterBalanceTable = new ClusterBalanceTable(db);
   }  
 
-  async getLast(clusterId: number): Promise<ClusterTransaction> {
-    return new Promise<ClusterTransaction>((resolve, reject) => {
-      let result: ClusterTransaction;
-      this.clusterTransactionTable.createReadStream({
-        gte: {clusterId: clusterId},
-        lt: {clusterId: clusterId+1},
-        reverse: true,
-        limit: 1
-      }).on('data', (data) => {
-        result = new ClusterTransaction(
-          data.value.txid,
-          data.key.height,
-          data.key.n);
-      }).on('error', function (err) {
-        reject(err);
-      })
-      .on('close', function () {
-      })
-      .on('finish', function () {
-        resolve(result);
-      });
-    });  
-  }
-
-  async getClusterBalanceWithUndefined(clusterId: number): Promise<number> {
+  async getClusterBalanceDefaultUndefined(clusterId: number): Promise<number> {
     return new Promise<number>((resolve, reject) => {
       this.clusterBalanceTable.get({clusterId: clusterId}).then((res: {balance: number}) => {
         resolve(res.balance);
@@ -54,28 +30,26 @@ export class ClusterTransactionService {
     });
   }
 
-  async getClusterBalance(clusterId: number): Promise<number> {
-    let res = await this.getClusterBalanceWithUndefined(clusterId);
+  async getClusterBalanceDefaultZero(clusterId: number): Promise<number> {
+    let res = await this.getClusterBalanceDefaultUndefined(clusterId);
     if (res === undefined) res = 0;
     return res;
   }
 
-  async getFirstTransaction(clusterId: number): Promise<ClusterTransaction> {
+  async getFirstClusterTransaction(clusterId: number): Promise<ClusterTransaction> {
     return new Promise<ClusterTransaction>((resolve, reject) => {
       let transaction;
-      let rs = this.clusterTransactionTable.createReadStream({
+      this.clusterTransactionTable.createReadStream({
         gte: {clusterId: clusterId},
         lt: {clusterId: clusterId+1},
         limit: 1
-      });
-      rs.on("data", function(data) {
+      }).on("data", function(data) {
         transaction = new ClusterTransaction(
           data.value.txid,
           data.key.height,
           data.key.n
         );
-      })
-      .on('error', function (err) {
+      }).on('error', function (err) {
         reject(err);
       })
       .on('finish', function () {
@@ -84,16 +58,15 @@ export class ClusterTransactionService {
     });
   }
 
-  async getLastClusetrTransaction(clusterId: number): Promise<ClusterTransaction> {
+  async getLastClusterTransaction(clusterId: number): Promise<ClusterTransaction> {
     return new Promise<ClusterTransaction>((resolve, reject) => {
       let transaction;
-      let rs = this.clusterTransactionTable.createReadStream({
+      this.clusterTransactionTable.createReadStream({
         gte: {clusterId: clusterId},
         lt: {clusterId: clusterId+1},
         limit: 1,
         reverse: true
-      });
-      rs.on("data", function(data) {
+      }).on("data", function(data) {
         transaction = new ClusterTransaction(
           data.value.txid,
           data.key.height,
@@ -111,51 +84,9 @@ export class ClusterTransactionService {
 
   async getClusterTransaction(clusterId: number, height: number, n: number): Promise<ClusterTransaction> {
     let value = await this.clusterTransactionTable.get({clusterId: clusterId, height: height, n: n});
-    let cb = new ClusterTransaction(value.txid/*, value.balanceDelta*/, height, n);
+    let cb = new ClusterTransaction(value.txid, height, n);
     return cb;
   }
-
-  async getClusterTransactionsAfter(clusterId: number, height: number, n: number): Promise<ClusterTransaction[]> {
-    return new Promise<ClusterTransaction[]>(async (resolve, reject) => {
-      let res: ClusterTransaction[] = [];
-      let resolved = false;
-      let rs = this.clusterTransactionTable.createReadStream({
-        gte: {clusterId: clusterId},
-        lt: {clusterId: clusterId+1},
-        reverse: true
-      }).on('data', (data) => {
-        let cb = new ClusterTransaction(
-          data.value.txid,
-          data.value.height,
-          data.value.n
-        );
-        if (cb.height > height || cb.height === height && cb.n >= n) {
-          res.push(cb);
-        } else {
-          if (!resolved) {
-            resolved = true;
-            res = res.reverse();
-            resolve(res);
-            rs['destroy']('no error');
-          }
-        }    
-      }).on('error', function (err) {
-        if (err !== "no error") {
-          console.log(err);
-          reject(err);
-        }
-      })
-      .on('close', function () {
-      })
-      .on('end', function () {
-        if (!resolved) {
-          resolved = true;
-          res = res.reverse();
-          resolve(res);
-        }
-      });
-    });
-  } 
 
   async getClusterTransactions(clusterId: number): Promise<ClusterTransaction[]> {
     return new Promise<ClusterTransaction[]>((resolve, reject) => {
@@ -189,7 +120,7 @@ export class ClusterTransactionService {
     let balancesFromPromises = [];
     fromClusters.forEach(fromCluster => {
       transactionsFromPromises.push(this.getClusterTransactions(fromCluster));
-      balancesFromPromises.push(this.getClusterBalance(fromCluster));
+      balancesFromPromises.push(this.getClusterBalanceDefaultZero(fromCluster));
     });
     let fromClustersTransactions = await Promise.all(transactionsFromPromises);
     let fromClustersBalances = await Promise.all(balancesFromPromises);
@@ -220,7 +151,7 @@ export class ClusterTransactionService {
     for (const [txid, tx] of txidToTransaction) {
       await this.db.writeBatchService.push(this.clusterTransactionTable.putOperation({clusterId: toCluster, height: tx.height, n: tx.n}, {txid: tx.txid}));
     };
-    let oldBalance = await this.getClusterBalance(toCluster);
+    let oldBalance = await this.getClusterBalanceDefaultZero(toCluster);
     let newBalance = oldBalance+fromClustersBalanceSum;
     if (oldBalance !== newBalance) {
       await this.db.writeBatchService.push(

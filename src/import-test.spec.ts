@@ -217,18 +217,18 @@ describe('Save a blocks with 3 transactions', () => {
     let c1 = await clusterAddressService.getAddressCluster(address1);
     let addresses = await clusterAddressService.getClusterAddresses(c1);
     expect(addresses).lengthOf(1);
-    expect(addresses).to.include(address1);
+    expect(addresses.map(address => address.address)).to.include(address1);
   });
 
   it('address2 cluster balance should be 32 satoshis', async () => {
     let c = await clusterAddressService.getAddressCluster(address2);
-    let balance = await clusterTransactionService.getClusterBalance(c);
+    let balance = await clusterTransactionService.getClusterBalanceDefaultZero(c);
     expect(balance).to.equal(31);
   });
 
   it('address1 cluster balance should be 8 satoshis', async () => {
     let c = await clusterAddressService.getAddressCluster(address1);
-    let balance = await clusterTransactionService.getClusterBalance(c);
+    let balance = await clusterTransactionService.getClusterBalanceDefaultZero(c);
     expect(balance).to.equal(8);
   });
 
@@ -240,7 +240,7 @@ describe('Save a blocks with 3 transactions', () => {
 
   it('address3 cluster balance should be 0', async () => {
     let c = await clusterAddressService.getAddressCluster(address3);
-    let balance = await clusterTransactionService.getClusterBalance(c);
+    let balance = await clusterTransactionService.getClusterBalanceDefaultZero(c);
     expect(balance).to.equal(0);
   });
 

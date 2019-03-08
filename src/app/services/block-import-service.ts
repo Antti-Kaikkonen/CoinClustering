@@ -78,16 +78,15 @@ export class BlockImportService {
     let promises: Promise<any>[] = [];
     for (let cluster of clusters) {
       let clusterIds: number[] = cluster.clusterIdsSorted();
-      let clusterAddresses: string[] = Array.from(cluster.addresses);
       if (clusterIds.length === 0) {
-        await this.clusterAddressService.createAddressClustersOps(clusterAddresses, await this.getNextClusterId());
+        await this.clusterAddressService.createAddressClustersOps(cluster.addresses, await this.getNextClusterId());
         this.nextClusterId++;
       } else {
         let toClusterId = clusterIds[0];
         let fromClusters = clusterIds.slice(1);
-        if (fromClusters.length > 0 || clusterAddresses.length > 0) {
+        if (fromClusters.length > 0 || cluster.addresses.length > 0) {
           console.log(lastBlockHeight.toString(),"merging to",toClusterId,"from",fromClusters.join(","));
-          promises.push(this.clusterAddressService.mergeClusterAddressesOps(toClusterId, fromClusters, clusterAddresses));
+          promises.push(this.clusterAddressService.mergeClusterAddressesOps(toClusterId, fromClusters, cluster.addresses));
           if (fromClusters.length > 0 && await this.getLastSavedTxHeight() > -1) promises.push(this.clusterTransactionService.mergeClusterTransactionsOps(toClusterId, ...fromClusters));
           for (const fromClusterId of fromClusters) {  
             await this.db.writeBatchService.push(
@@ -153,7 +152,7 @@ export class BlockImportService {
       let addressesToReolve: number = blockAddressesArray.length*2;
       if (addressesToReolve === 0) resolve();
       blockAddressesArray.forEach(address => {
-        this.clusterAddressService.getAddressBalance(address).then(balance => {
+        this.clusterAddressService.getAddressBalanceDefaultUndefined(address).then(balance => {
           addressToBalance.set(address, balance);
           addressToOldBalance.set(address, balance);
           addressesToReolve--;
@@ -164,7 +163,7 @@ export class BlockImportService {
           let clusterId = res.clusterId;
           addressToClusterId.set(address, clusterId);
           if (!clusterIdToBalancePromise.has(clusterId)) {
-            clusterIdToBalancePromise.set(clusterId, this.clusterTransactionService.getClusterBalanceWithUndefined(clusterId));
+            clusterIdToBalancePromise.set(clusterId, this.clusterTransactionService.getClusterBalanceDefaultZero(clusterId));
           }
           addressesToReolve--;
           if (addressesToReolve === 0) resolve();

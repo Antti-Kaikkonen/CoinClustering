@@ -52,10 +52,10 @@ export class ClusterController {
       if (queryPos >= 0) newPath += req.url.substr(queryPos);
       res.redirect(301, newPath);
     } else {
-      let addressCountPromise = this.clusterAddressService.getAddressCount(clusterId);
-      let balancePromise = this.clusterTransactionService.getClusterBalanceWithUndefined(clusterId);
-      let firstTransactionPromise = this.clusterTransactionService.getFirstTransaction(clusterId);
-      let lastTransactionPromise = this.clusterTransactionService.getLastClusetrTransaction(clusterId);
+      let addressCountPromise = this.clusterAddressService.getAddressCountDefaultUndefined(clusterId);
+      let balancePromise = this.clusterTransactionService.getClusterBalanceDefaultZero(clusterId);
+      let firstTransactionPromise = this.clusterTransactionService.getFirstClusterTransaction(clusterId);
+      let lastTransactionPromise = this.clusterTransactionService.getLastClusterTransaction(clusterId);
       let addressCount = await addressCountPromise;
       if (addressCount === undefined) {
         res.sendStatus(404);

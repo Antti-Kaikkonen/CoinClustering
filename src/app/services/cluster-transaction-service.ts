@@ -1,3 +1,4 @@
+import { Writable } from 'stream';
 import { ClusterTransaction } from '../models/cluster-transaction';
 import { BalanceToClusterTable } from '../tables/balance-to-cluster-table';
 import { ClusterBalanceTable } from '../tables/cluster-balance-table';
@@ -91,11 +92,10 @@ export class ClusterTransactionService {
   async getClusterTransactions(clusterId: number): Promise<ClusterTransaction[]> {
     return new Promise<ClusterTransaction[]>((resolve, reject) => {
       let transactions = [];
-      let rs = this.clusterTransactionTable.createReadStream({
+      this.clusterTransactionTable.createReadStream({
         gte: {clusterId: clusterId},
         lt: {clusterId: clusterId+1}
-      });
-      rs.on("data", function(data) {
+      }).on("data", function(data) {
         let cb = new ClusterTransaction(
           data.value.txid,
           data.key.height,
@@ -116,43 +116,63 @@ export class ClusterTransactionService {
 
   async mergeClusterTransactionsOps(toCluster: number, ...fromClusters: number[]): Promise<void> {
     if (fromClusters.length === 0) return;
-    let transactionsFromPromises = [];
-    let balancesFromPromises = [];
-    fromClusters.forEach(fromCluster => {
-      transactionsFromPromises.push(this.getClusterTransactions(fromCluster));
-      balancesFromPromises.push(this.getClusterBalanceDefaultZero(fromCluster));
-    });
-    let fromClustersTransactions = await Promise.all(transactionsFromPromises);
-    let fromClustersBalances = await Promise.all(balancesFromPromises);
+    let toClusterBalancePromsie = this.getClusterBalanceDefaultZero(toCluster);
+    let fromClusterBalanceSum: number = 0;
     let txidToTransaction: Map<string, ClusterTransaction> = new Map();
-    //let merged = [];
-    let fromClustersBalanceSum = 0;
-    for (const [index, fromCluster] of fromClusters.entries()) {
-      let clusterTransactions: ClusterTransaction[] = fromClustersTransactions[index];
-      let clusterBalance: number = fromClustersBalances[index];
-      fromClustersBalanceSum += clusterBalance;
-      for (const tx of clusterTransactions) {
-        if (!txidToTransaction.has(tx.txid)) {
-          txidToTransaction.set(tx.txid, tx);
-        }
-        await this.db.writeBatchService.push(
-          this.clusterTransactionTable.delOperation({clusterId: fromCluster, height: tx.height, n: tx.n})
-        );
-      };
-      await this.db.writeBatchService.push(
-        this.clusterBalanceTable.delOperation({clusterId: fromCluster})
-      );
-      if (clusterTransactions.length > 0) {
-        await this.db.writeBatchService.push(
-          this.balanceToClusterTable.delOperation({balance: clusterBalance, clusterId: fromCluster})
-        );
-      }
-    };
+    let allClustersMerged = new Promise((resolve, reject) => {
+      let clustersToMerge: number = fromClusters.length;
+      if (clustersToMerge === 0) resolve();
+      fromClusters.forEach(fromCluster => {
+        let clusterBalancePromise = this.getClusterBalanceDefaultZero(fromCluster);
+        let clusterTransactionCount = 0;
+        let txMerger = new Writable({
+          objectMode: true,
+          write: async (data: {key: {height: number, n: number}, value: {txid: string}}, encoding, callback) => {
+            clusterTransactionCount++;
+            let tx: ClusterTransaction = new ClusterTransaction(
+              data.value.txid,
+              data.key.height,
+              data.key.n
+            );
+            if (!txidToTransaction.has(tx.txid)) {
+              txidToTransaction.set(tx.txid, tx);
+            }
+            await this.db.writeBatchService.push(
+              this.clusterTransactionTable.delOperation({clusterId: fromCluster, height: tx.height, n: tx.n})
+            );
+            callback(null);
+          }
+        });
+
+        this.clusterTransactionTable.createReadStream({
+          gte: {clusterId: fromCluster},
+          lt: {clusterId: fromCluster+1}
+        }).pipe(txMerger);
+
+        txMerger.on('finish', async () => {
+          await this.db.writeBatchService.push(
+            this.clusterBalanceTable.delOperation({clusterId: fromCluster})
+          );
+          let clusterBalance = await clusterBalancePromise;
+          fromClusterBalanceSum += clusterBalance;
+          if (clusterTransactionCount > 0) {
+            await this.db.writeBatchService.push(
+              this.balanceToClusterTable.delOperation({balance: clusterBalance, clusterId: fromCluster})
+            );
+          }
+          clustersToMerge--;
+          if (clustersToMerge === 0) resolve();
+        });
+
+      });
+    });  
+
+    await allClustersMerged;
     for (const [txid, tx] of txidToTransaction) {
       await this.db.writeBatchService.push(this.clusterTransactionTable.putOperation({clusterId: toCluster, height: tx.height, n: tx.n}, {txid: tx.txid}));
     };
-    let oldBalance = await this.getClusterBalanceDefaultZero(toCluster);
-    let newBalance = oldBalance+fromClustersBalanceSum;
+    let oldBalance = await toClusterBalancePromsie;
+    let newBalance = oldBalance+fromClusterBalanceSum;
     if (oldBalance !== newBalance) {
       await this.db.writeBatchService.push(
         this.balanceToClusterTable.delOperation({balance: oldBalance, clusterId: toCluster})

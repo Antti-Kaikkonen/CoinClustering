@@ -1,8 +1,15 @@
+import { injectable } from 'inversify';
 import * as lexi from 'lexint';
 import { db_next_cluster_id } from "../misc/db-constants";
+import { BinaryDB } from '../services/binary-db';
 import { PrefixTable } from './prefix-table';
 
+@injectable()
 export class NextClusterIdTable extends PrefixTable<undefined, { nextClusterId: number }> {
+
+  constructor(db: BinaryDB) {
+    super(db);
+  }
 
   prefix = db_next_cluster_id;
 

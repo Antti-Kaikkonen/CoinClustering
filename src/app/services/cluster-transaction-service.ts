@@ -1,3 +1,4 @@
+import { injectable } from 'inversify';
 import { Writable } from 'stream';
 import { ClusterTransaction } from '../models/cluster-transaction';
 import { BalanceToClusterTable } from '../tables/balance-to-cluster-table';
@@ -5,16 +6,15 @@ import { ClusterBalanceTable } from '../tables/cluster-balance-table';
 import { ClusterTransactionTable } from '../tables/cluster-transaction-table';
 import { BinaryDB } from './binary-db';
 
-export class ClusterTransactionService {
-  
-  clusterTransactionTable: ClusterTransactionTable;
-  balanceToClusterTable: BalanceToClusterTable;
-  clusterBalanceTable: ClusterBalanceTable;
 
-  constructor(private db: BinaryDB) {
-    this.clusterTransactionTable = new ClusterTransactionTable(db);
-    this.balanceToClusterTable = new BalanceToClusterTable(db);
-    this.clusterBalanceTable = new ClusterBalanceTable(db);
+@injectable()
+export class ClusterTransactionService {
+
+  constructor(private db: BinaryDB,
+    private clusterTransactionTable: ClusterTransactionTable,
+    private balanceToClusterTable: BalanceToClusterTable,
+    private clusterBalanceTable: ClusterBalanceTable
+  ) {
   }  
 
   async getClusterBalanceDefaultUndefined(clusterId: number): Promise<number> {

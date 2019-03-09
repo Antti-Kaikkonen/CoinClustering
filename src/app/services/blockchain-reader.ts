@@ -1,4 +1,5 @@
 import { AbstractBatch } from "abstract-leveldown";
+import { injectable } from "inversify";
 import { Readable, Transform } from "stream";
 import RestApi from '../misc/rest-api';
 import RpcApi from '../misc/rpc-api';
@@ -14,6 +15,7 @@ let _restApi: RestApi;
 let _rpcApi: RpcApi;
 let _db: BinaryDB;
 
+@injectable()
 export class BlockchainReader {
   constructor(restApi: RestApi, rpcApi: RpcApi, addressEncodingService: AddressEncodingService, db: BinaryDB) {
     _restApi = restApi;

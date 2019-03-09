@@ -1,27 +1,18 @@
 import { Request, Response } from "express";
+import { injectable } from "inversify";
 import RpcApi from "../misc/rpc-api";
 import { txAddressBalanceChanges } from "../misc/utils";
 import { Transaction } from "../models/transaction";
-import { AddressEncodingService } from "../services/address-encoding-service";
-import { AddressService } from "../services/address-service";
-import { BinaryDB } from "../services/binary-db";
 import { ClusterAddressService } from "../services/cluster-address-service";
-import { AddressClusterTable } from "../tables/address-cluster-table";
 import { OutputCacheTable } from "../tables/output-cache-table";
 
+@injectable()
 export class TransactionController {
 
-
-  private addressClusterTable: AddressClusterTable;
-  private outputCacheTable: OutputCacheTable;
-  private clusterAddressService: ClusterAddressService;
-  private addressService: AddressService;
-
-  constructor(private db: BinaryDB, addressEncodingService: AddressEncodingService, private rpcApi: RpcApi) {
-    this.addressClusterTable = new AddressClusterTable(db, addressEncodingService);
-    this.outputCacheTable = new OutputCacheTable(this.db, addressEncodingService);
-    this.addressService = new AddressService(this.db, addressEncodingService);
-    this.clusterAddressService = new ClusterAddressService(db, addressEncodingService, this.addressService);
+  constructor(private rpcApi: RpcApi,
+    private outputCacheTable: OutputCacheTable,
+    private clusterAddressService: ClusterAddressService,
+  ) {
   }  
 
 

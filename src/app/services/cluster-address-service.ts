@@ -1,31 +1,23 @@
+import { injectable } from 'inversify';
 import { Writable } from 'stream';
 import { ClusterAddress } from '../models/cluster-address';
-import { AddressBalanceTable } from '../tables/address-balance-table';
 import { AddressClusterTable } from '../tables/address-cluster-table';
-import { AddressTransactionTable } from '../tables/address-transaction-table';
 import { ClusterAddressCountTable } from '../tables/cluster-address-count-table';
 import { ClusterAddressTable } from '../tables/cluster-address-table';
-import { NextClusterIdTable } from '../tables/next-cluster-id-table';
-import { AddressEncodingService } from './address-encoding-service';
 import { AddressService } from './address-service';
 import { BinaryDB } from './binary-db';
 
+
+@injectable()
 export class ClusterAddressService {
 
-  clusterAddressTable: ClusterAddressTable;
-  clusterAddressCountTable: ClusterAddressCountTable;
-  nextClusterIdTable: NextClusterIdTable;
-  addressClusterTable: AddressClusterTable;
-  addressBalanceTable: AddressBalanceTable;
-  addressTransactionTable: AddressTransactionTable;
 
-  constructor(private db: BinaryDB,  addressEncodingService: AddressEncodingService, private addressService: AddressService) {
-    this.clusterAddressTable = new ClusterAddressTable(db, addressEncodingService);
-    this.clusterAddressCountTable = new ClusterAddressCountTable(db);
-    this.nextClusterIdTable = new NextClusterIdTable(db);
-    this.addressClusterTable = new AddressClusterTable(db, addressEncodingService);
-    this.addressBalanceTable = new AddressBalanceTable(db, addressEncodingService);
-    this.addressTransactionTable = new AddressTransactionTable(db, addressEncodingService);
+  constructor(private db: BinaryDB,  
+    private addressService: AddressService,
+    private clusterAddressTable: ClusterAddressTable,
+    private clusterAddressCountTable: ClusterAddressCountTable,
+    private addressClusterTable: AddressClusterTable,
+  ) {
   }  
 
   async getAddressCountDefaultUndefined(clusterId: number): Promise<number> {

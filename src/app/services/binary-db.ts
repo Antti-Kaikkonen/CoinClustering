@@ -1,8 +1,11 @@
 import { AbstractBatch, AbstractLevelDOWN } from "abstract-leveldown";
 import EncodingDown from "encoding-down";
+import { injectable } from "inversify";
 import LevelUp from "levelup";
 import { WriteBatchService } from "./write-batch-service";
 
+
+@injectable()
 export class BinaryDB extends LevelUp<AbstractLevelDOWN<Buffer, Buffer>> {
 
   writeBatchService: WriteBatchService;

@@ -1,24 +1,18 @@
 import cors from 'cors';
-import EncodingDown from 'encoding-down';
 import express from 'express';
-import rocksDB from 'rocksdb';
 import { Writable } from 'stream';
 import { AddressController } from './app/controllers/address-controller';
 import { ClusterController } from './app/controllers/cluster-controller';
 import { TransactionController } from './app/controllers/transaction-controller';
-import RestApi from './app/misc/rest-api';
+import { myContainer } from "./app/inversify.config";
 import RpcApi from './app/misc/rpc-api';
 import { BlockWithTransactions } from './app/models/block';
 import addressRoutes from './app/routes/address';
 import clusterRoutes from './app/routes/cluster';
 import transactionRoutes from './app/routes/transaction';
-import { AddressEncodingService } from './app/services/address-encoding-service';
-import { AddressService } from './app/services/address-service';
 import { BinaryDB } from './app/services/binary-db';
 import { BlockImportService } from './app/services/block-import-service';
 import { BlockchainReader } from './app/services/blockchain-reader';
-import { ClusterAddressService } from './app/services/cluster-address-service';
-import { ClusterTransactionService } from './app/services/cluster-transaction-service';
 
 
 
@@ -29,36 +23,19 @@ import { ClusterTransactionService } from './app/services/cluster-transaction-se
 let cwd = process.cwd();
 const config: any = require(cwd+'/config');
 
-let addressEncodingService = new AddressEncodingService(config.pubkeyhash, config.scripthash, config.segwitprefix);
+let rpcApi = myContainer.get(RpcApi);//new RpcApi(config.host, config.port, config.user, config.pass);
 
+let db: BinaryDB = myContainer.get(BinaryDB);
 
-//var rpc = new RpcClient(config);
-let rocksdb = rocksDB(cwd+'/rocksdb');
+let clusterController = myContainer.get(ClusterController);//null;//new ClusterController(db, addressEncodingService, rpcApi);
 
-let restApi = new RestApi(config.host, config.port);
-let rpcApi = new RpcApi(config.host, config.port, config.user, config.pass);
+let addressController = myContainer.get(AddressController);//null;//new AddressController(db, addressEncodingService);
 
-let db = new BinaryDB(EncodingDown<Buffer, Buffer>(rocksdb, {keyEncoding: 'binary', valueEncoding: 'binary'}), {
-  writeBufferSize: 16 * 1024 * 1024,
-  cacheSize: config.dbcache * 1024 * 1024,
-  compression: true
-});
+let transactionController = myContainer.get(TransactionController);//null;//new TransactionController(db, addressEncodingService, rpcApi);
 
-let clusterBalanceService = new ClusterTransactionService(db);
+let blockImportService = myContainer.get(BlockImportService);//null;//new BlockImportService(db, clusterAddressService, clusterBalanceService, addressService, addressEncodingService);
 
-let addressService = new AddressService(db, addressEncodingService);
-
-let clusterAddressService = new ClusterAddressService(db, addressEncodingService, addressService);
-
-let clusterController = new ClusterController(db, addressEncodingService, rpcApi);
-
-let addressController = new AddressController(db, addressEncodingService);
-
-let transactionController = new TransactionController(db, addressEncodingService, rpcApi);
-
-let blockImportService = new BlockImportService(db, clusterAddressService, clusterBalanceService, addressService, addressEncodingService);
-
-let blockchainReader = new BlockchainReader(restApi, rpcApi, addressEncodingService, db);
+let blockchainReader = myContainer.get(BlockchainReader);//new BlockchainReader(restApi, rpcApi, addressEncodingService, db);
 
 const app = express();
 app.use(cors());

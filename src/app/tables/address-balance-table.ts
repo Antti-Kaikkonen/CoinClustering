@@ -1,13 +1,17 @@
+import { inject, injectable } from 'inversify';
 import * as lexi from 'lexint';
 import { db_address_balance_prefix } from "../misc/db-constants";
 import { AddressEncodingService } from '../services/address-encoding-service';
 import { BinaryDB } from '../services/binary-db';
 import { PrefixTable } from './prefix-table';
 
+@injectable()
 export class AddressBalanceTable extends PrefixTable< { address: string }, 
 { balance: number }> {
 
-  constructor(db: BinaryDB, private addressEncodingService: AddressEncodingService) {
+  constructor(
+    @inject(BinaryDB) db: BinaryDB, 
+    @inject(AddressEncodingService) private addressEncodingService: AddressEncodingService) {
     super(db);
   }
 

@@ -1,9 +1,16 @@
+import { injectable } from 'inversify';
 import * as lexi from 'lexint';
 import { db_cluster_balance_prefix } from "../misc/db-constants";
+import { BinaryDB } from '../services/binary-db';
 import { PrefixTable } from './prefix-table';
 
+@injectable()
 export class ClusterBalanceTable extends PrefixTable< { clusterId: number}, 
 { balance: number }> {
+
+  constructor(db: BinaryDB) {
+    super(db);
+  }
 
   prefix = db_cluster_balance_prefix;
 

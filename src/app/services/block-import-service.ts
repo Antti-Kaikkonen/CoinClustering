@@ -1,3 +1,4 @@
+import { injectable } from "inversify";
 import { ClusterBuilder } from "../misc/cluster-builder";
 import { txAddressBalanceChanges, txAddresses } from "../misc/utils";
 import { BlockWithTransactions } from "../models/block";
@@ -13,42 +14,31 @@ import { ClusterTransactionTable } from "../tables/cluster-transaction-table";
 import { LastMergedHeightTable } from "../tables/last-merged-height-table";
 import { LastSavedTxHeightTable } from "../tables/last-saved-tx-height-table";
 import { NextClusterIdTable } from "../tables/next-cluster-id-table";
-import { AddressEncodingService } from "./address-encoding-service";
 import { AddressService } from "./address-service";
 import { BinaryDB } from "./binary-db";
 import { ClusterAddressService } from "./cluster-address-service";
 import { ClusterTransactionService } from "./cluster-transaction-service";
 
+@injectable()
 export class BlockImportService {
 
-  addressClusterTable: AddressClusterTable;
-  clusterMergedToTable: ClusterMergedToTable;
-  nextClusterIdTable: NextClusterIdTable;
-  lastMergedHeightTable: LastMergedHeightTable;
-  lastSavedTxHeightTable: LastSavedTxHeightTable;
-  clusterTransactionTable: ClusterTransactionTable;
-  balanceToClusterTable: BalanceToClusterTable;
-  clusterBalanceTable: ClusterBalanceTable;
-  addressTransactionTable: AddressTransactionTable;
-  addressBalanceTable: AddressBalanceTable;
-  clusterAddressTable: ClusterAddressTable;
 
   constructor(private db: BinaryDB,
     private clusterAddressService: ClusterAddressService, 
     private clusterTransactionService: ClusterTransactionService,
     private addressService: AddressService,
-    addressEncodingService: AddressEncodingService) {
-      this.addressClusterTable = new AddressClusterTable(db, addressEncodingService);
-      this.clusterMergedToTable = new ClusterMergedToTable(db);
-      this.nextClusterIdTable = new NextClusterIdTable(db);
-      this.lastMergedHeightTable = new LastMergedHeightTable(db);
-      this.lastSavedTxHeightTable = new LastSavedTxHeightTable(db);
-      this.clusterTransactionTable = new ClusterTransactionTable(db);
-      this.balanceToClusterTable = new BalanceToClusterTable(db);
-      this.clusterBalanceTable = new ClusterBalanceTable(db);
-      this.addressTransactionTable = new AddressTransactionTable(db, addressEncodingService);
-      this.addressBalanceTable = new AddressBalanceTable(db, addressEncodingService);
-      this.clusterAddressTable = new ClusterAddressTable(db, addressEncodingService);
+    private addressClusterTable: AddressClusterTable,
+    private clusterMergedToTable: ClusterMergedToTable,
+    private nextClusterIdTable: NextClusterIdTable,
+    private lastMergedHeightTable: LastMergedHeightTable,
+    private lastSavedTxHeightTable: LastSavedTxHeightTable,
+    private clusterTransactionTable: ClusterTransactionTable,
+    private balanceToClusterTable: BalanceToClusterTable,
+    private clusterBalanceTable: ClusterBalanceTable,
+    private addressTransactionTable: AddressTransactionTable,
+    private addressBalanceTable: AddressBalanceTable,
+    private clusterAddressTable: ClusterAddressTable
+  ) {
   }  
 
   lastMergedHeight: number;

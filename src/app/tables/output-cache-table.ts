@@ -1,9 +1,11 @@
+import { injectable } from 'inversify';
 import * as lexi from 'lexint';
 import { db_output_prefix } from '../misc/db-constants';
 import { AddressEncodingService } from '../services/address-encoding-service';
 import { BinaryDB } from '../services/binary-db';
 import { PrefixTable } from './prefix-table';
 
+@injectable()
 export class OutputCacheTable extends PrefixTable<{txid: string, n: number}, { addresses: string[], valueSat: number }> {
 
   constructor(db: BinaryDB, private addressEncodingService: AddressEncodingService) {

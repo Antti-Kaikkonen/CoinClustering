@@ -1,8 +1,15 @@
+import { injectable } from 'inversify';
 import * as lexi from 'lexint';
 import { db_cluster_merged_to } from "../misc/db-constants";
+import { BinaryDB } from '../services/binary-db';
 import { PrefixTable } from './prefix-table';
 
+@injectable()
 export class ClusterMergedToTable extends PrefixTable< { fromClusterId: number}, { toClusterId: number }> {
+
+  constructor(db: BinaryDB) {
+    super(db);
+  }
 
   prefix = db_cluster_merged_to;
 

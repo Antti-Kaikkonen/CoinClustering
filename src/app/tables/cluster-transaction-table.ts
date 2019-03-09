@@ -1,12 +1,19 @@
+import { injectable } from 'inversify';
 import * as lexi from 'lexint';
 import { db_cluster_transaction_prefix } from "../misc/db-constants";
+import { BinaryDB } from '../services/binary-db';
 import { PrefixTable } from './prefix-table';
 
 const TXID_BYTE_LENGTH = 32;
 const SIGN_NEGATIVE = 0;
 
+@injectable()
 export class ClusterTransactionTable extends PrefixTable< { clusterId: number, height?: number, n?: number}, 
 { txid: string }> {
+
+  constructor(db: BinaryDB) {
+    super(db);
+  }
 
   prefix = db_cluster_transaction_prefix;
   keyencoding = {

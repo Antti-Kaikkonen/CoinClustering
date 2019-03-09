@@ -1,9 +1,11 @@
+import { injectable } from 'inversify';
 import * as lexi from 'lexint';
 import { db_address_cluster_prefix } from "../misc/db-constants";
 import { AddressEncodingService } from '../services/address-encoding-service';
 import { BinaryDB } from '../services/binary-db';
 import { PrefixTable } from './prefix-table';
 
+@injectable()
 export class AddressClusterTable extends PrefixTable< { address: string}, { clusterId: number }> {
 
   constructor(db: BinaryDB, private addressEncodingService: AddressEncodingService) {

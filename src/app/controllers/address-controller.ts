@@ -1,15 +1,11 @@
 import { Request, Response } from 'express';
-import { AddressEncodingService } from '../services/address-encoding-service';
+import { injectable } from 'inversify';
 import { AddressService } from '../services/address-service';
-import { BinaryDB } from '../services/binary-db';
 
-
+@injectable()
 export class AddressController {
 
-  private addressService: AddressService;
-
-  constructor(private db: BinaryDB, addressEncodingService: AddressEncodingService) {
-    this.addressService = new AddressService(this.db, addressEncodingService);
+  constructor(private addressService: AddressService) {
   }  
 
   clusterId = async (req:Request, res:Response) => {

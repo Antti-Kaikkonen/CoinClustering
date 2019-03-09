@@ -1,13 +1,19 @@
 import RpcClient from 'bitcoind-rpc';
+import { inject, injectable, named } from 'inversify';
 import { Transaction } from '../models/transaction';
 
 const rpc_batch_size = 30;
 
+@injectable()
 export default class RpcApi {
 
   rpc: RpcClient;
 
-  constructor(private host: string, private port: number, user: string, pass: string, protocol: 'http' | 'https' = "http") {
+  constructor(@inject("string") @named("host") private host: string, 
+    @inject("number") @named("port") private port: number, 
+    @inject("string") @named("user") user: string, 
+    @inject("string") @named("pass") pass: string, 
+    @inject("string") @named("protocol") protocol: 'http' | 'https' = "http") {
     this.rpc = new RpcClient({host: host, port: port, protocol: protocol, user: user, pass: pass});
   }
 

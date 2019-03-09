@@ -30,10 +30,10 @@ describe('Save a blocks with 3 transactions', () => {
       });
     });
     db = new BinaryDB(EncodingDown<Buffer, Buffer>(rocksDB(dbpath), {keyEncoding: 'binary', valueEncoding: 'binary'}), {errorIfExists: true});
-    addressService = new AddressService(db, addressEncodingService);
-    clusterAddressService = new ClusterAddressService(db, addressEncodingService, addressService);
-    clusterTransactionService = new ClusterTransactionService(db);
-    blockImportService = new BlockImportService(db, clusterAddressService, clusterTransactionService, addressService, addressEncodingService);
+    addressService = null;//new AddressService(db, addressEncodingService);
+    clusterAddressService = null;//new ClusterAddressService(db, addressEncodingService, addressService);
+    clusterTransactionService = null;//new ClusterTransactionService(db);
+    blockImportService = null;//new BlockImportService(db, clusterAddressService, clusterTransactionService, addressService, addressEncodingService);
 
     await blockImportService.saveBlock(b1);
   });

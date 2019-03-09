@@ -1,17 +1,12 @@
+import { injectable } from "inversify";
 import { AddressBalanceTable } from "../tables/address-balance-table";
 import { AddressClusterTable } from "../tables/address-cluster-table";
-import { AddressEncodingService } from "./address-encoding-service";
-import { BinaryDB } from "./binary-db";
 
+@injectable()
 export class AddressService {
 
-  private addressClusterTable: AddressClusterTable;
-  private addressBalanceTable: AddressBalanceTable;
-
-  constructor(private db: BinaryDB, 
-    addressEncodingService: AddressEncodingService) {
-    this.addressClusterTable = new AddressClusterTable(db, addressEncodingService);
-    this.addressBalanceTable = new AddressBalanceTable(db, addressEncodingService);
+  constructor(private addressClusterTable: AddressClusterTable,
+    private addressBalanceTable: AddressBalanceTable) {
   }  
 
   async getAddressBalanceDefaultUndefined(address: string): Promise<number> {

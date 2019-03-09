@@ -1,9 +1,11 @@
 import RpcClient from 'bitcoind-rpc';
-import { BinaryDB } from './binary-db';
+import { injectable } from 'inversify';
 
+
+@injectable()
 export class BlockService {
 
-  constructor(private db: BinaryDB, private rpc: RpcClient) {
+  constructor(private rpc: RpcClient) {
   }  
 
   async getRpcBlockHash(height: number): Promise<string> {

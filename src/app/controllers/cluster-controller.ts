@@ -1,10 +1,8 @@
 import { Request, Response } from 'express';
+import { injectable } from 'inversify';
 import RpcApi from '../misc/rpc-api';
 import { txAddressBalanceChanges } from '../misc/utils';
 import { ClusterTransaction } from '../models/cluster-transaction';
-import { AddressEncodingService } from '../services/address-encoding-service';
-import { AddressService } from '../services/address-service';
-import { BinaryDB } from '../services/binary-db';
 import { ClusterAddressService } from '../services/cluster-address-service';
 import { ClusterTransactionService } from '../services/cluster-transaction-service';
 import { BalanceToClusterTable } from '../tables/balance-to-cluster-table';
@@ -13,27 +11,18 @@ import { ClusterMergedToTable } from '../tables/cluster-merged-to-table';
 import { ClusterTransactionTable } from '../tables/cluster-transaction-table';
 import { OutputCacheTable } from '../tables/output-cache-table';
 
-
+@injectable()
 export class ClusterController {
 
-  private clusterTransactionService: ClusterTransactionService;
-  private clusterAddressService: ClusterAddressService;
-  private balanceToClusterTable: BalanceToClusterTable;
-  private clusterMergedToTable: ClusterMergedToTable;
-  private clusterTransactionTable: ClusterTransactionTable;
-  private clusterAddressTable: ClusterAddressTable;
-  private outputCacheTable: OutputCacheTable;
-  private addressSerive: AddressService;
-
-  constructor(db: BinaryDB, addressEncodingService: AddressEncodingService, private rpcApi: RpcApi) {
-    this.clusterTransactionService = new ClusterTransactionService(db);
-    this.addressSerive = new AddressService(db, addressEncodingService);
-    this.clusterAddressService = new ClusterAddressService(db, addressEncodingService, this.addressSerive);
-    this.balanceToClusterTable = new BalanceToClusterTable(db);
-    this.clusterMergedToTable = new ClusterMergedToTable(db);
-    this.clusterTransactionTable = new ClusterTransactionTable(db);
-    this.clusterAddressTable = new ClusterAddressTable(db, addressEncodingService);
-    this.outputCacheTable = new OutputCacheTable(db, addressEncodingService);
+  constructor(
+    private rpcApi: RpcApi,
+    private clusterTransactionService: ClusterTransactionService,
+    private clusterAddressService: ClusterAddressService,
+    private balanceToClusterTable: BalanceToClusterTable,
+    private clusterMergedToTable: ClusterMergedToTable,
+    private clusterTransactionTable: ClusterTransactionTable,
+    private clusterAddressTable: ClusterAddressTable,
+    private outputCacheTable: OutputCacheTable) {
   }  
 
 

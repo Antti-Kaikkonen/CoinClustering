@@ -1,8 +1,10 @@
 import { AbstractBatch, AbstractIteratorOptions } from "abstract-leveldown";
 import { EventEmitter } from "events";
+import { injectable } from "inversify";
 import { Transform } from "stream";
 import { BinaryDB } from "../services/binary-db";
 
+@injectable()
 export abstract class PrefixTable<K, V> implements Table<K, V> {
 
   constructor(private db: BinaryDB) {

@@ -1,11 +1,18 @@
+import { injectable } from 'inversify';
 import { db_write_batch_state_prefix } from "../misc/db-constants";
+import { BinaryDB } from "../services/binary-db";
 import { PrefixTable } from "./prefix-table";
 
 const BYTE_EMPTY = 0;
 const BYTE_FILLING = 1;
 const BYTE_EMPTYING = 2;
 
+@injectable()
 export class WriteBatchStateTable extends PrefixTable<undefined, {status: WriteBatchState}> {
+
+  constructor(db: BinaryDB) {
+    super(db);
+  }
 
   prefix = db_write_batch_state_prefix;
 

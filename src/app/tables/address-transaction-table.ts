@@ -1,3 +1,4 @@
+import { injectable } from 'inversify';
 import * as lexi from 'lexint';
 import { db_address_transaction_prefix } from '../misc/db-constants';
 import { AddressEncodingService } from '../services/address-encoding-service';
@@ -6,6 +7,7 @@ import { PrefixTable } from './prefix-table';
 
 const TXID_BYTE_LENGTH = 32;
 
+@injectable()
 export class AddressTransactionTable extends PrefixTable< { address: string, height: number, n: number }, { txid: string, balance: number }> {
 
   constructor(db: BinaryDB, private addressEncodingService: AddressEncodingService) {

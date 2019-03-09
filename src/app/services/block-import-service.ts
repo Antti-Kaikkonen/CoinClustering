@@ -14,6 +14,7 @@ import { LastMergedHeightTable } from "../tables/last-merged-height-table";
 import { LastSavedTxHeightTable } from "../tables/last-saved-tx-height-table";
 import { NextClusterIdTable } from "../tables/next-cluster-id-table";
 import { AddressEncodingService } from "./address-encoding-service";
+import { AddressService } from "./address-service";
 import { BinaryDB } from "./binary-db";
 import { ClusterAddressService } from "./cluster-address-service";
 import { ClusterTransactionService } from "./cluster-transaction-service";
@@ -35,6 +36,7 @@ export class BlockImportService {
   constructor(private db: BinaryDB,
     private clusterAddressService: ClusterAddressService, 
     private clusterTransactionService: ClusterTransactionService,
+    private addressService: AddressService,
     addressEncodingService: AddressEncodingService) {
       this.addressClusterTable = new AddressClusterTable(db, addressEncodingService);
       this.clusterMergedToTable = new ClusterMergedToTable(db);
@@ -152,7 +154,7 @@ export class BlockImportService {
       let addressesToReolve: number = blockAddressesArray.length*2;
       if (addressesToReolve === 0) resolve();
       blockAddressesArray.forEach(address => {
-        this.clusterAddressService.getAddressBalanceDefaultUndefined(address).then(balance => {
+        this.addressService.getAddressBalanceDefaultUndefined(address).then(balance => {
           addressToBalance.set(address, balance);
           addressToOldBalance.set(address, balance);
           addressesToReolve--;

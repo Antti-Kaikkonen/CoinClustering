@@ -13,6 +13,7 @@ import addressRoutes from './app/routes/address';
 import clusterRoutes from './app/routes/cluster';
 import transactionRoutes from './app/routes/transaction';
 import { AddressEncodingService } from './app/services/address-encoding-service';
+import { AddressService } from './app/services/address-service';
 import { BinaryDB } from './app/services/binary-db';
 import { BlockImportService } from './app/services/block-import-service';
 import { BlockchainReader } from './app/services/blockchain-reader';
@@ -45,7 +46,9 @@ let db = new BinaryDB(EncodingDown<Buffer, Buffer>(rocksdb, {keyEncoding: 'binar
 
 let clusterBalanceService = new ClusterTransactionService(db);
 
-let clusterAddressService = new ClusterAddressService(db, addressEncodingService);
+let addressService = new AddressService(db, addressEncodingService);
+
+let clusterAddressService = new ClusterAddressService(db, addressEncodingService, addressService);
 
 let clusterController = new ClusterController(db, addressEncodingService, rpcApi);
 
@@ -53,7 +56,7 @@ let addressController = new AddressController(db, addressEncodingService);
 
 let transactionController = new TransactionController(db, addressEncodingService, rpcApi);
 
-let blockImportService = new BlockImportService(db, clusterAddressService, clusterBalanceService, addressEncodingService);
+let blockImportService = new BlockImportService(db, clusterAddressService, clusterBalanceService, addressService, addressEncodingService);
 
 let blockchainReader = new BlockchainReader(restApi, rpcApi, addressEncodingService, db);
 

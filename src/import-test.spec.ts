@@ -4,6 +4,7 @@ import 'mocha';
 import rocksDB from 'rocksdb';
 import { BlockWithTransactions } from './app/models/block';
 import { AddressEncodingService } from './app/services/address-encoding-service';
+import { AddressService } from './app/services/address-service';
 import { BinaryDB } from './app/services/binary-db';
 import { BlockImportService } from './app/services/block-import-service';
 import { ClusterAddressService } from './app/services/cluster-address-service';
@@ -19,6 +20,7 @@ describe('Save a blocks with 3 transactions', () => {
 
   let clusterAddressService: ClusterAddressService;
   let clusterTransactionService: ClusterTransactionService;
+  let addressService: AddressService;
 
   let blockImportService: BlockImportService;
   before(async () => {
@@ -28,9 +30,10 @@ describe('Save a blocks with 3 transactions', () => {
       });
     });
     db = new BinaryDB(EncodingDown<Buffer, Buffer>(rocksDB(dbpath), {keyEncoding: 'binary', valueEncoding: 'binary'}), {errorIfExists: true});
-    clusterAddressService = new ClusterAddressService(db, addressEncodingService);
+    addressService = new AddressService(db, addressEncodingService);
+    clusterAddressService = new ClusterAddressService(db, addressEncodingService, addressService);
     clusterTransactionService = new ClusterTransactionService(db);
-    blockImportService = new BlockImportService(db, clusterAddressService, clusterTransactionService, addressEncodingService);
+    blockImportService = new BlockImportService(db, clusterAddressService, clusterTransactionService, addressService, addressEncodingService);
 
     await blockImportService.saveBlock(b1);
   });
@@ -202,44 +205,44 @@ describe('Save a blocks with 3 transactions', () => {
   };
 
   it('address3 and address4 should be in the same cluster', async () => {
-    let c1 = await clusterAddressService.getAddressCluster(address3);
-    let c2 = await clusterAddressService.getAddressCluster(address4);
+    let c1 = await addressService.getAddressCluster(address3);
+    let c2 = await addressService.getAddressCluster(address4);
     expect(c1).to.equal(c2);
   });
 
   it('address3 cluster should contain two addresses', async () => {
-    let c1 = await clusterAddressService.getAddressCluster(address3);
+    let c1 = await addressService.getAddressCluster(address3);
     let addresses = await clusterAddressService.getClusterAddresses(c1);
     expect(addresses).lengthOf(2);
   });
 
   it('address1 cluster should not contain other addresses', async () => {
-    let c1 = await clusterAddressService.getAddressCluster(address1);
+    let c1 = await addressService.getAddressCluster(address1);
     let addresses = await clusterAddressService.getClusterAddresses(c1);
     expect(addresses).lengthOf(1);
     expect(addresses.map(address => address.address)).to.include(address1);
   });
 
   it('address2 cluster balance should be 32 satoshis', async () => {
-    let c = await clusterAddressService.getAddressCluster(address2);
+    let c = await addressService.getAddressCluster(address2);
     let balance = await clusterTransactionService.getClusterBalanceDefaultZero(c);
     expect(balance).to.equal(31);
   });
 
   it('address1 cluster balance should be 8 satoshis', async () => {
-    let c = await clusterAddressService.getAddressCluster(address1);
+    let c = await addressService.getAddressCluster(address1);
     let balance = await clusterTransactionService.getClusterBalanceDefaultZero(c);
     expect(balance).to.equal(8);
   });
 
   it('address3 cluster should contain 3 transactions', async () => {
-    let c = await clusterAddressService.getAddressCluster(address3);
+    let c = await addressService.getAddressCluster(address3);
     let transactions = await clusterTransactionService.getClusterTransactions(c);
     expect(transactions).lengthOf(3);
   });
 
   it('address3 cluster balance should be 0', async () => {
-    let c = await clusterAddressService.getAddressCluster(address3);
+    let c = await addressService.getAddressCluster(address3);
     let balance = await clusterTransactionService.getClusterBalanceDefaultZero(c);
     expect(balance).to.equal(0);
   });

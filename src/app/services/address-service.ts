@@ -8,7 +8,8 @@ export class AddressService {
   private addressClusterTable: AddressClusterTable;
   private addressBalanceTable: AddressBalanceTable;
 
-  constructor(private db: BinaryDB, addressEncodingService: AddressEncodingService) {
+  constructor(private db: BinaryDB, 
+    addressEncodingService: AddressEncodingService) {
     this.addressClusterTable = new AddressClusterTable(db, addressEncodingService);
     this.addressBalanceTable = new AddressBalanceTable(db, addressEncodingService);
   }  

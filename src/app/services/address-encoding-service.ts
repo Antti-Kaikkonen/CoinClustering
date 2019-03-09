@@ -1,6 +1,10 @@
 import bech32 from 'bech32';
 import bs58 from 'bs58';
 import crypto from 'crypto';
+import { inject, injectable, named } from "inversify";
+import "reflect-metadata";
+
+
 
 
 //byte format will be prefixed with one of these
@@ -16,9 +20,13 @@ function calculateDoubleSha256CheckSum(data: Buffer): Buffer {
   return second.slice(0, 4);
 }
 
+@injectable()
 export class AddressEncodingService {
 
-  constructor(private pubkeyhash: number, private scripthash: number, private segwitprefix?: string) {
+  constructor(
+    @inject("number") @named("pubkeyhash") private pubkeyhash: number, 
+    @inject("number") @named("scripthash") private scripthash: number, 
+    @inject("string") @named("segwitprefix") private segwitprefix?: string) {
   }
 
   addressToBytes(address: string): Buffer {

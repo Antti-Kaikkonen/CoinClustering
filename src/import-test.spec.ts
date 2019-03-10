@@ -1,11 +1,9 @@
 import { expect } from 'chai';
-import EncodingDown from 'encoding-down';
 import 'mocha';
 import rocksDB from 'rocksdb';
+//import { myContainer } from "./app/inversify.config.test";
 import { BlockWithTransactions } from './app/models/block';
-import { AddressEncodingService } from './app/services/address-encoding-service';
 import { AddressService } from './app/services/address-service';
-import { BinaryDB } from './app/services/binary-db';
 import { BlockImportService } from './app/services/block-import-service';
 import { ClusterAddressService } from './app/services/cluster-address-service';
 import { ClusterTransactionService } from './app/services/cluster-transaction-service';
@@ -13,10 +11,6 @@ import { ClusterTransactionService } from './app/services/cluster-transaction-se
 describe('Save a blocks with 3 transactions', () => {
 
   const dbpath = './test-db';
-
-  let db;
-
-  let addressEncodingService = new AddressEncodingService(0x4c, 0x10, null);
 
   let clusterAddressService: ClusterAddressService;
   let clusterTransactionService: ClusterTransactionService;
@@ -29,11 +23,11 @@ describe('Save a blocks with 3 transactions', () => {
         resolve();
       });
     });
-    db = new BinaryDB(EncodingDown<Buffer, Buffer>(rocksDB(dbpath), {keyEncoding: 'binary', valueEncoding: 'binary'}), {errorIfExists: true});
-    addressService = null;//new AddressService(db, addressEncodingService);
-    clusterAddressService = null;//new ClusterAddressService(db, addressEncodingService, addressService);
-    clusterTransactionService = null;//new ClusterTransactionService(db);
-    blockImportService = null;//new BlockImportService(db, clusterAddressService, clusterTransactionService, addressService, addressEncodingService);
+    let myContainer = require('./app/inversify.config.test').myContainer;
+    addressService = myContainer.get(AddressService);
+    clusterAddressService = myContainer.get(ClusterAddressService);
+    clusterTransactionService = myContainer.get(ClusterTransactionService);
+    blockImportService = myContainer.get(BlockImportService);
 
     await blockImportService.saveBlock(b1);
   });

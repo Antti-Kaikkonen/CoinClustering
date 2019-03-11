@@ -45,7 +45,7 @@ app.use('/addresses', addressRoutes(addressController));
 app.use('/tx', transactionRoutes(transactionController));
 app.listen(config.listen_port);
 
-const stay_behind_blocks = 1000000;
+const stay_behind_blocks = 100;
 
 async function doProcessing() {
   await db.writeBatchService.process();

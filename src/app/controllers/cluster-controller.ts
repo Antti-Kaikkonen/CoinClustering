@@ -1,6 +1,5 @@
 import { Request, Response } from 'express';
 import { injectable } from 'inversify';
-import RpcApi from '../misc/rpc-api';
 import { ClusterTransaction } from '../models/cluster-transaction';
 import { ClusterAddressService } from '../services/cluster-address-service';
 import { ClusterTransactionService } from '../services/cluster-transaction-service';
@@ -8,20 +7,17 @@ import { BalanceToClusterTable } from '../tables/balance-to-cluster-table';
 import { ClusterAddressTable } from '../tables/cluster-address-table';
 import { ClusterMergedToTable } from '../tables/cluster-merged-to-table';
 import { ClusterTransactionTable } from '../tables/cluster-transaction-table';
-import { OutputCacheTable } from '../tables/output-cache-table';
 
 @injectable()
 export class ClusterController {
 
   constructor(
-    private rpcApi: RpcApi,
     private clusterTransactionService: ClusterTransactionService,
     private clusterAddressService: ClusterAddressService,
     private balanceToClusterTable: BalanceToClusterTable,
     private clusterMergedToTable: ClusterMergedToTable,
     private clusterTransactionTable: ClusterTransactionTable,
-    private clusterAddressTable: ClusterAddressTable,
-    private outputCacheTable: OutputCacheTable) {
+    private clusterAddressTable: ClusterAddressTable) {
   }  
 
 
@@ -45,6 +41,7 @@ export class ClusterController {
     } else {
       let addressCountPromise = this.clusterAddressService.getAddressCountDefaultUndefined(clusterId);
       let balancePromise = this.clusterTransactionService.getClusterBalanceDefaultZero(clusterId);
+      let transactionCountPromise = this.clusterTransactionService.getClusterTransactionCountDefaultZero(clusterId);
       let firstTransactionPromise = this.clusterTransactionService.getFirstClusterTransaction(clusterId);
       let lastTransactionPromise = this.clusterTransactionService.getLastClusterTransaction(clusterId);
       let addressCount = await addressCountPromise;
@@ -55,7 +52,8 @@ export class ClusterController {
           balance: await balancePromise,
           firstTransaction: await firstTransactionPromise,
           lastTransaction: await lastTransactionPromise,
-          addressCount: await addressCountPromise
+          addressCount: await addressCountPromise,
+          transactionCount: await transactionCountPromise
         });
       }
     }  
@@ -131,6 +129,7 @@ export class ClusterController {
           data.key.n,
           data.value.balanceChange
         )));
+        first = false;
       }).on('finish', () => {
         res.write(']');
         res.end();

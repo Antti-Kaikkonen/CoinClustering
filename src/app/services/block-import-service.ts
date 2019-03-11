@@ -199,7 +199,7 @@ export class BlockImportService {
         let newBalance: number = oldBalance + delta;
         clusterIdToBalance.set(clusterId, newBalance);
         await this.db.writeBatchService.push(
-          this.clusterTransactionTable.putOperation({clusterId: clusterId, height: block.height, n: txN}, {txid: tx.txid})
+          this.clusterTransactionTable.putOperation({clusterId: clusterId, height: block.height, n: txN}, {txid: tx.txid, balanceChange: delta})
         );
       };
     }

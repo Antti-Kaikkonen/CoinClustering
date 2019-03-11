@@ -9,7 +9,7 @@ const SIGN_NEGATIVE = 0;
 
 @injectable()
 export class ClusterTransactionTable extends PrefixTable< { clusterId: number, height?: number, n?: number}, 
-{ txid: string }> {
+{ txid: string, balanceChange: number }> {
 
   constructor(db: BinaryDB) {
     super(db);
@@ -38,16 +38,29 @@ export class ClusterTransactionTable extends PrefixTable< { clusterId: number, h
   };
 
   valueencoding = {
-    encode: (key: { txid: string }): Buffer => {
+    encode: (key: { txid: string, balanceChange: number }): Buffer => {
       let txidBytes = Buffer.from(key.txid, 'hex');
       if (txidBytes.length !== TXID_BYTE_LENGTH) throw Error("TXID must be " + TXID_BYTE_LENGTH +" bytes");
-      return txidBytes;
+      let balanceChangeBytes = lexi.encode(Math.abs(key.balanceChange));
+      let signBytes: Buffer;
+      if (key.balanceChange < 0) 
+        signBytes = Buffer.from([SIGN_NEGATIVE]); 
+      else 
+        signBytes = Buffer.alloc(0);
+      return Buffer.concat([txidBytes, balanceChangeBytes, signBytes]);
     },
-    decode: (buf: Buffer): { txid: string } => {
+    decode: (buf: Buffer): { txid: string, balanceChange: number } => {
       let offset = 0;
-      let txid = buf.toString('hex', offset, 32);
+      let txid = buf.toString('hex', offset, TXID_BYTE_LENGTH);
+      offset += TXID_BYTE_LENGTH;
+      let balanceChange = lexi.decode(buf, offset);
+      offset += balanceChange.byteLength;
+      if (offset < buf.length && buf[offset] === SIGN_NEGATIVE) {
+        balanceChange.value *= -1;
+      }
       return {
-        txid: txid
+        txid: txid,
+        balanceChange: balanceChange.value
       };
     }
   };

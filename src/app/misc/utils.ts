@@ -4,6 +4,10 @@ export function JSONtoAmount(value: number): number {
   return Math.round(1e8 * value);
 }
 
+export const expressWrapAsync = fn => (req, res, next) => {
+  fn(req,res).catch((error) => next(error));
+};
+
 export function txAddressesToCluster(tx: Transaction): Set<string> {
   let result = new Set<string>();
   if (isMixingTx(tx)) return result;

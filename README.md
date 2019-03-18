@@ -172,3 +172,21 @@ Indexing the bitcoin blockchain can take more or less than a week depending on y
 17034506
 ```
 </details>
+<details>
+ <summary>GET /addresses/:address/transactions</summary>
+
+ ### Query parameters
+  * gt, gte, lt, lte (optional)
+* reverse (optional) = true/false, defalt: false
+* limit (optional) = integer (0...1000), defalt: 100
+</details>
+
+### Transactions
+<details>
+ <summary>GET /transactions/:txid/cluster-balance-changes</summary>
+</details>
+
+
+<details>
+ <summary>GET /transactions/:txid/details</summary>
+</details>

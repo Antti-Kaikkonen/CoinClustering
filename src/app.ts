@@ -39,11 +39,14 @@ let blockchainReader = myContainer.get(BlockchainReader);//new BlockchainReader(
 
 const app = express();
 app.use(cors());
-
 app.use('/clusters', clusterRoutes(clusterController));
 app.use('/addresses', addressRoutes(addressController));
-app.use('/tx', transactionRoutes(transactionController));
+app.use('/transactions', transactionRoutes(transactionController));
 app.listen(config.listen_port);
+app.use(function (err, req, res, next) {
+  console.error(err.stack)
+  res.sendStatus(500);
+});
 
 const stay_behind_blocks = 100;
 

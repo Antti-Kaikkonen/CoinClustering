@@ -116,12 +116,6 @@ export class ClusterController {
       let first = true;
       let stream = this.clusterTransactionTable.createReadStream(options);
       stream.on('data', (data) => {
-        new ClusterTransaction(
-          data.value.txid,
-          data.key.height,
-          data.key.n,
-          data.value.balanceChange
-        );
         if (!first) res.write(",");
         res.write(JSON.stringify(new ClusterTransaction(
           data.value.txid,
@@ -194,7 +188,6 @@ export class ClusterController {
       res.contentType('application/json');
       res.write('[');
       let first = true;
-    
       let stream = this.clusterAddressTable.createReadStream(options);
       stream.on('data', (data) => {
         if (!first) res.write(",");
@@ -227,10 +220,9 @@ export class ClusterController {
       if (!Number.isInteger(clusterId) || clusterId < 0) throw new Error("Invalid clusterId");
     }
     return {balance: balance, clusterId: clusterId};
-
   }
 
-  largestClusters = async (req:Request, res:Response) => {
+  clusters = async (req:Request, res:Response) => {
     res.contentType('application/json');
 
     let limit = req.query.limit !== undefined ? Number(req.query.limit) : 100;

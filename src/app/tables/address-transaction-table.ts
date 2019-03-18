@@ -8,7 +8,7 @@ import { PrefixTable } from './prefix-table';
 const TXID_BYTE_LENGTH = 32;
 
 @injectable()
-export class AddressTransactionTable extends PrefixTable< { address: string, height: number, n: number }, { txid: string, balance: number }> {
+export class AddressTransactionTable extends PrefixTable< { address: string, height?: number, n?: number }, { txid: string, balance: number }> {
 
   constructor(db: BinaryDB, private addressEncodingService: AddressEncodingService) {
     super(db);
@@ -18,10 +18,12 @@ export class AddressTransactionTable extends PrefixTable< { address: string, hei
 
   keyencoding = {
     encode: (key: { address: string, height: number, n: number }): Buffer => {
-      let addressBytes = this.addressEncodingService.addressToBytes(key.address);
-      let heightBytes = lexi.encode(key.height);
-      let nBytes = lexi.encode(key.n);
-      return Buffer.concat([addressBytes, heightBytes, nBytes]);
+      let res = [this.addressEncodingService.addressToBytes(key.address)];
+      if (key.height !== undefined) 
+        res.push(lexi.encode(key.height));
+      if (key.n !== undefined)
+        res.push(lexi.encode(key.n));
+      return Buffer.concat(res);
         //return bs58.decode(key.address);
     },
     decode: (buf: Buffer): { address: string, height: number, n: number } => {

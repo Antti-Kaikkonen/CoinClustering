@@ -50,14 +50,14 @@ Indexing the bitcoin blockchain can take more or less than a week depending on y
 <details>
  <summary>GET /clusters</summary>
 
-# Query parameters
+## Query parameters
 * gt, gte, lt, lte (optional) = balanceSats / balanceSats-clusterId
 * reverse (optional) = true/false, defalt: false
 * limit (optional) = integer (0...1000), defalt: 100
-# Example
-## Request
+## Example
+### Request
 `/clusters?limit=3&reverse=true&lte=10000000000000`
-## Response
+### Response
 ``` json
 [
   {
@@ -78,10 +78,10 @@ Indexing the bitcoin blockchain can take more or less than a week depending on y
 <details>
  <summary>GET /clusters/:id/summary</summary>
 
-# Example
-## Request
+## Example
+### Request
 `/clusters/17034506/summary`
-## Response
+### Response
 ``` json
 {
   "balance": 9816291286270,
@@ -102,15 +102,15 @@ Indexing the bitcoin blockchain can take more or less than a week depending on y
 <details>
  <summary>GET /clusters/:id/transactions</summary>
 
-# Query parameters
+## Query parameters
 * gt, gte, lt, lte (optional)
 * reverse (optional) = true/false, defalt: false
 * limit (optional) = integer (0...1000), defalt: 100
 * include-delta (optional) = true/false, defalt: false
-# Example
-## Request
+## Example
+### Request
 `/clusters/17034506/transactions?limit=3&reverse=true&include-delta=true`
-## Response
+### Response
 ``` json
 [
   {
@@ -137,14 +137,14 @@ Indexing the bitcoin blockchain can take more or less than a week depending on y
 <details>
  <summary>GET /clusters/:id/addresses</summary>
 
-# Query parameters
+## Query parameters
 * gt, gte, lt, lte (optional)
 * reverse (optional) = true/false, defalt: false
 * limit (optional) = integer (0...1000), defalt: 100
-# Example
-## Request
+## Example
+### Request
 `/clusters/17034506/addresses?limit=3&reverse=true`
-## Response
+### Response
 ``` json
 [
   {
@@ -190,3 +190,11 @@ Indexing the bitcoin blockchain can take more or less than a week depending on y
 <details>
  <summary>GET /transactions/:txid/details</summary>
 </details>
+
+### Miscellaneous
+<details>
+ <summary>GET /status</summary>
+</details>
+
+## Limitations
+Stays 10 blocks behind the latest block to avoid having to deal with blockchain reorganizations.

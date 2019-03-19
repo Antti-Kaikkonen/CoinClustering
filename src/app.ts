@@ -3,12 +3,14 @@ import express from 'express';
 import { Writable } from 'stream';
 import { AddressController } from './app/controllers/address-controller';
 import { ClusterController } from './app/controllers/cluster-controller';
+import { StatusController } from './app/controllers/status-controller';
 import { TransactionController } from './app/controllers/transaction-controller';
 import { myContainer } from "./app/inversify.config";
 import RpcApi from './app/misc/rpc-api';
 import { BlockWithTransactions } from './app/models/block';
 import addressRoutes from './app/routes/address';
 import clusterRoutes from './app/routes/cluster';
+import statusRoutes from './app/routes/status';
 import transactionRoutes from './app/routes/transaction';
 import { BinaryDB } from './app/services/binary-db';
 import { BlockImportService } from './app/services/block-import-service';
@@ -27,18 +29,21 @@ let rpcApi = myContainer.get(RpcApi);//new RpcApi(config.host, config.port, conf
 
 let db: BinaryDB = myContainer.get(BinaryDB);
 
-let clusterController = myContainer.get(ClusterController);//null;//new ClusterController(db, addressEncodingService, rpcApi);
+let statusController = myContainer.get(StatusController);
 
-let addressController = myContainer.get(AddressController);//null;//new AddressController(db, addressEncodingService);
+let clusterController = myContainer.get(ClusterController);
 
-let transactionController = myContainer.get(TransactionController);//null;//new TransactionController(db, addressEncodingService, rpcApi);
+let addressController = myContainer.get(AddressController);
 
-let blockImportService = myContainer.get(BlockImportService);//null;//new BlockImportService(db, clusterAddressService, clusterBalanceService, addressService, addressEncodingService);
+let transactionController = myContainer.get(TransactionController);
 
-let blockchainReader = myContainer.get(BlockchainReader);//new BlockchainReader(restApi, rpcApi, addressEncodingService, db);
+let blockImportService = myContainer.get(BlockImportService);
+
+let blockchainReader = myContainer.get(BlockchainReader);
 
 const app = express();
 app.use(cors());
+app.use('/status', statusRoutes(statusController));
 app.use('/clusters', clusterRoutes(clusterController));
 app.use('/addresses', addressRoutes(addressController));
 app.use('/transactions', transactionRoutes(transactionController));
@@ -48,7 +53,7 @@ app.use(function (err, req, res, next) {
   res.sendStatus(500);
 });
 
-const stay_behind_blocks = 100;
+const stay_behind_blocks = 10;
 
 async function doProcessing() {
   await db.writeBatchService.process();

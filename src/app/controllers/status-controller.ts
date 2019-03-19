@@ -15,12 +15,24 @@ export class StatusController {
 
   getStatus = async (req: Request, res: Response) => {
     let rpcHeightPromise: Promise<number> = this.rpcApi.getRpcHeight();
-    let mergedHeightPromise: Promise<{height: number}> = this.lastMergedHeightTable.get(undefined)
-    let txHeightPromise: Promise<{height: number}> = this.lastSavedTxHeightTable.get(undefined);
+    let clustersProcessedHeightPromise: Promise<{height: number}> = this.lastMergedHeightTable.get(undefined)
+    let balancesProcessedHeightPromise: Promise<{height: number}> = this.lastSavedTxHeightTable.get(undefined);
+    let clustersProcessedHeight: number;
+    try{
+      clustersProcessedHeight = (await clustersProcessedHeightPromise).height;
+    } catch(err) {
+      if (err.notFound) clustersProcessedHeight = 0;
+    } 
+    let balancesProcessedHeight: number;
+    try{
+      balancesProcessedHeight = (await balancesProcessedHeightPromise).height;
+    } catch(err) {
+      if (err.notFound) balancesProcessedHeight = 0;
+    } 
     res.json({
       rpcHeight: await rpcHeightPromise,
-      clustersProcessedHeight: (await mergedHeightPromise).height,
-      balancesProcessedHeight: (await txHeightPromise).height
+      clustersProcessedHeight: clustersProcessedHeight,
+      balancesProcessedHeight: balancesProcessedHeight
     });
   }  
 

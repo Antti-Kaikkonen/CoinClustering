@@ -7,6 +7,7 @@ export default function(clusterController: ClusterController): Router {
   router.get("/:id/transactions", expressWrapAsync(clusterController.clusterTransactions));
   router.get('/:id/addresses', expressWrapAsync(clusterController.clusterAddresses));
   router.get('/:id/summary', expressWrapAsync(clusterController.clusterInfo));
+  router.get('/:id/balance-candlesticks', expressWrapAsync(clusterController.candleSticks));
   router.get('', expressWrapAsync(clusterController.clusters));
   return router;
 }

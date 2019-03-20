@@ -1,6 +1,10 @@
 import { Request, Response } from 'express';
 import { injectable } from 'inversify';
+import { Transform, Writable } from 'stream';
+import RestApi from '../misc/rest-api';
+import RpcApi from '../misc/rpc-api';
 import { ClusterTransaction } from '../models/cluster-transaction';
+import { BlockTimeService } from '../services/block-time-service';
 import { ClusterAddressService } from '../services/cluster-address-service';
 import { ClusterTransactionService } from '../services/cluster-transaction-service';
 import { BalanceToClusterTable } from '../tables/balance-to-cluster-table';
@@ -17,7 +21,10 @@ export class ClusterController {
     private balanceToClusterTable: BalanceToClusterTable,
     private clusterMergedToTable: ClusterMergedToTable,
     private clusterTransactionTable: ClusterTransactionTable,
-    private clusterAddressTable: ClusterAddressTable) {
+    private clusterAddressTable: ClusterAddressTable,
+    private blockTimeService: BlockTimeService,
+    private rpcApi: RpcApi,
+    private restApi: RestApi) {
   }  
 
 
@@ -266,6 +273,88 @@ export class ClusterController {
       stream['destroy']();
       console.log("destroyed");
     });
+  }
+
+  candleSticks = async (req:Request, res:Response) => {
+    let clusterId: number = Number(req.params.id);
+
+    let redirectToCluster = await this.redirectToCluster(clusterId);
+    if (redirectToCluster !== undefined) {
+      let newPath = req.baseUrl+req.route.path.replace(':id', redirectToCluster);
+      let queryPos = req.url.indexOf("?");
+      if (queryPos >= 0) newPath += req.url.substr(queryPos);
+      res.redirect(301, newPath);
+    } else {
+      res.contentType('application/json');
+      let candleSticks: Map<number, {open: number, close: number, low: number, high: number, date: number}> = new Map();
+      let currentBalance = 0;
+      res.write('[');
+      let first = true;
+      let previousCandle: {open: number, close: number, low: number, high: number, date: number};
+
+
+
+      let toTxAndTimePromise = new Transform({
+        objectMode: true,
+        transform: async (data: {key: {height: number, n: number}, value: {txid: string, balanceChange: number}} , encoding, callback) => {
+          let tx: ClusterTransaction = new ClusterTransaction(
+            data.value.txid,
+            data.key.height,
+            data.key.n,
+            data.value.balanceChange
+          );
+          toTxAndTimePromise.push({tx: tx, timePromise: this.blockTimeService.getTime(tx.height)});
+          callback();
+        }
+      });
+
+      let writer = new Writable({
+        objectMode: true,
+        write: async (txAndTime: {tx: ClusterTransaction, timePromise: Promise<number>}, encoding, callback) => {
+          let tx: ClusterTransaction = txAndTime.tx;
+          currentBalance += tx.balanceChange;
+          let time = await txAndTime.timePromise;
+          let epochDate = Math.floor(time/(60*60*24));
+          let candle = candleSticks.get(epochDate);
+          if (candle === undefined) {
+            candle = {open: currentBalance-tx.balanceChange, close: currentBalance, low: Math.min(currentBalance, currentBalance-tx.balanceChange), high: Math.max(currentBalance, currentBalance-tx.balanceChange), date: epochDate};
+            candleSticks.set(epochDate, candle);
+            if (previousCandle === undefined) {
+              previousCandle = candle;
+            } else if (previousCandle !== candle) {
+              if (!first) res.write(",");
+              first = false;
+              res.write(JSON.stringify(previousCandle));
+              previousCandle = candle;
+            }
+          } else {
+            candle.close = currentBalance;
+            if (currentBalance < candle.low) candle.low = currentBalance;
+            if (currentBalance > candle.high) candle.high = currentBalance;
+          }
+          callback(null);
+        }
+      });
+
+
+      let stream = this.clusterTransactionTable.createReadStream({
+        lt: {clusterId: clusterId+1}, 
+        gt: {clusterId: clusterId}
+      });
+      stream.pipe(toTxAndTimePromise).pipe(writer).on('finish', () => {
+        if (previousCandle !== undefined) {
+          if (!first) res.write(",");
+          res.write(JSON.stringify(previousCandle));
+        }  
+        res.write(']');
+        res.end();
+      });
+      req.on('close', () => {
+        console.log("cancelled by user. destroying");
+        stream['destroy']();
+        console.log("destroyed");
+      });
+    }
   }
 
 }  

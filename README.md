@@ -163,6 +163,10 @@ Indexing the bitcoin blockchain can take more or less than a week depending on y
 ```
 </details>
 
+<details>
+ <summary>GET /clusters/:id/balance-candlesticks</summary>
+</details> 
+
 ### Addresses
 <details>
  <summary>GET /addresses/:address/cluster_id</summary>
@@ -180,6 +184,10 @@ Indexing the bitcoin blockchain can take more or less than a week depending on y
 * reverse (optional) = true/false, defalt: false
 * limit (optional) = integer (0...1000), defalt: 100
 </details>
+
+<details>
+ <summary>GET /addresses/:address/balance-candlesticks</summary>
+</details> 
 
 ### Transactions
 <details>

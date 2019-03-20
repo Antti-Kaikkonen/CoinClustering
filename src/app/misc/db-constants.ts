@@ -11,7 +11,7 @@ export const db_next_cluster_id = Buffer.alloc(1, 8);// prefix/varint(id)
 export const db_block_hash = Buffer.alloc(1, 9);//prefix/height => hash
 export const db_last_merged_block_height = Buffer.alloc(1, 10);//prefix => height
 export const db_last_saved_tx_height = Buffer.alloc(1, 11);//prefix => height
-//export const db_last_saved_tx_n = Buffer.alloc(1, 12);//prefix => n
+export const db_block_time_prefix = Buffer.alloc(1, 12);//prefix => n
 export const db_cluster_merged_to = Buffer.alloc(1, 13);//prefix/clusterId => clusterId (follow these links to discover current cluster from an old clusterId)
 export const db_balace_to_cluster_prefix = Buffer.alloc(1, 14);//
 export const db_output_prefix = Buffer.alloc(1, 15);//

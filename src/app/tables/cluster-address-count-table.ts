@@ -1,6 +1,6 @@
 import { injectable } from 'inversify';
 import * as lexi from 'lexint';
-import { db_cluster_address_count_prefix } from "../misc/db-constants";
+import { db_cluster_address_count_prefix } from '../misc/db-constants';
 import { BinaryDB } from '../services/binary-db';
 import { PrefixTable } from './prefix-table';
 
@@ -17,7 +17,7 @@ export class ClusterAddressCountTable extends PrefixTable< { clusterId: number},
     encode: (key: { clusterId: number}): Buffer => {
         return lexi.encode(key.clusterId);
     },
-    decode: (buf: Buffer): { clusterId: number, addressIndex?: number} => {
+    decode: (buf: Buffer): { clusterId: number} => {
       let clusterId = lexi.decode(buf).value;
       return {
         clusterId: clusterId

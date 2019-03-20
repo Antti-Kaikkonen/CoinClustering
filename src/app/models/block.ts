@@ -35,3 +35,20 @@ export class BlockWithTransactions extends BlockWithoutTransactions {
   }
 
 }  
+
+export class BlockHeaders {
+  hash: string;
+  confirmations: number;
+  height: number;
+  version: number;
+  versionHex: string;
+  merkleroot: string;
+  time: number;
+  mediantime: number;
+  nonce: number;
+  bits: string;
+  difficulty: number;
+  chainwork: string;
+  previousblockhash: string;
+  nextblockhash: string;
+}

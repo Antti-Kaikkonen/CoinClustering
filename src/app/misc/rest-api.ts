@@ -1,7 +1,7 @@
 import * as http from 'http';
 import { inject, injectable, named } from 'inversify';
 import "reflect-metadata";
-import { BlockWithTransactions } from '../models/block';
+import { BlockHeaders, BlockWithTransactions } from '../models/block';
 
 @injectable()
 export default class RestApi {
@@ -15,6 +15,22 @@ export default class RestApi {
   async restblock(hash: string): Promise<BlockWithTransactions> {
     return new Promise<BlockWithTransactions>((resolve, reject) => {
       http.get("http://"+this.host+":"+this.port+"/rest/block/"+hash+".json", (resp: http.IncomingMessage) => {
+  
+        let data = '';
+        resp.on('data', (chunk) => {
+          data += chunk;
+        });
+    
+        resp.on('end', () => {
+          resolve(JSON.parse(data));
+        });
+      });
+    });
+  }
+
+  async blockHeaders(count: number, hash: string): Promise<BlockHeaders[]> {
+    return new Promise<BlockHeaders[]>((resolve, reject) => {
+      http.get("http://"+this.host+":"+this.port+"/rest/headers/"+count+"/"+hash+".json", (resp: http.IncomingMessage) => {
   
         let data = '';
         resp.on('data', (chunk) => {

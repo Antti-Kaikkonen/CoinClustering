@@ -14,6 +14,7 @@ import statusRoutes from './app/routes/status';
 import transactionRoutes from './app/routes/transaction';
 import { BinaryDB } from './app/services/binary-db';
 import { BlockImportService } from './app/services/block-import-service';
+import { BlockTimeService } from './app/services/block-time-service';
 import { BlockchainReader } from './app/services/blockchain-reader';
 
 
@@ -40,6 +41,8 @@ let transactionController = myContainer.get(TransactionController);
 let blockImportService = myContainer.get(BlockImportService);
 
 let blockchainReader = myContainer.get(BlockchainReader);
+
+let blockTimeService = myContainer.get(BlockTimeService);
 
 const app = express();
 app.use(cors());
@@ -84,6 +87,7 @@ async function doProcessing() {
       objectMode: true,
       write: async (block: BlockWithTransactions, encoding, callback) => {
         await blockImportService.saveBlockTransactionsAsync(block);
+        blockTimeService.setTime(block.height, block.time);
         callback(null);
       }
     });
@@ -105,4 +109,6 @@ async function doProcessing() {
   });
 }
 
-doProcessing();
+blockTimeService.init().then(() => {
+  doProcessing();
+});

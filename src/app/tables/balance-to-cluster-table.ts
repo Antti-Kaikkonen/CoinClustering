@@ -4,7 +4,6 @@ import { db_balace_to_cluster_prefix } from "../misc/db-constants";
 import { BinaryDB } from '../services/binary-db';
 import { PrefixTable } from './prefix-table';
 
-
 @injectable()
 export class BalanceToClusterTable extends PrefixTable< { balance: number, clusterId?: number}, 
 {  }> {

@@ -6,7 +6,6 @@ import { BlockHeaders, BlockWithTransactions } from '../models/block';
 @injectable()
 export default class RestApi {
 
-
   constructor(
     @inject("string") @named("host") private host: string, 
     @inject("number") @named("port") private port: number) {

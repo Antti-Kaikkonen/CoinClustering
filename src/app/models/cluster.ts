@@ -1,4 +1,5 @@
 export class Cluster {
+  
   constructor(
     public addresses: string[] = [], 
     public clusterIds: number[] = []

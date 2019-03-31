@@ -45,7 +45,6 @@ export class WriteBatchTable extends PrefixTable<{ key:Buffer }, { type: WriteTy
       }
     }
   };
-
 }  
 
 export type WriteType = "put" | "del";

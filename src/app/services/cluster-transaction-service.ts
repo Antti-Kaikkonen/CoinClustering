@@ -7,7 +7,6 @@ import { ClusterTransactionCountTable } from '../tables/cluster-transaction-coun
 import { ClusterTransactionTable } from '../tables/cluster-transaction-table';
 import { BinaryDB } from './binary-db';
 
-
 @injectable()
 export class ClusterTransactionService {
 
@@ -16,8 +15,7 @@ export class ClusterTransactionService {
     private balanceToClusterTable: BalanceToClusterTable,
     private clusterBalanceTable: ClusterBalanceTable,
     private clusterTransactionCountTable: ClusterTransactionCountTable
-  ) {
-  }  
+  ) {}  
 
   async getClusterTransactionCountDefaultZero(clusterId: number): Promise<number> {
     try {
@@ -201,8 +199,6 @@ export class ClusterTransactionService {
       });
     });
     await allClustersMerged;
-
-
     let newTxCount = 0;
     for (const promise of txIdToOldTransationPromise.values()) {
       let tx = await promise;

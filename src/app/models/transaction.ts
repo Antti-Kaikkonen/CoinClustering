@@ -10,7 +10,6 @@ export class Transaction {
   vout: TransactionOutput[];
 }
 
-
 export class TransactionInput {
   coinbase?: string;
   txid?: string;
@@ -20,7 +19,6 @@ export class TransactionInput {
     hex: string;
   }
   sequence: number;
-
   value?: number;
   valueSat?: number;
   address?: string;
@@ -36,6 +34,5 @@ export class TransactionOutput {
     type: string;
     addresses: string[];
   }
-
   valueSat?: number;
 }  

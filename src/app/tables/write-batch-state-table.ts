@@ -49,7 +49,6 @@ export class WriteBatchStateTable extends PrefixTable<undefined, {status: WriteB
       }
     }
   };
-
 }  
 
 export type WriteBatchState = "filling" | "emptying" | "empty";

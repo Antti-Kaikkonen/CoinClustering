@@ -27,7 +27,6 @@ export class ClusterController {
     private restApi: RestApi) {
   }  
 
-
   private async redirectToCluster(clusterId: number): Promise<number> {
     try {
       return (await this.clusterMergedToTable.get({fromClusterId: clusterId})).toClusterId;
@@ -78,9 +77,7 @@ export class ClusterController {
       if (!Number.isInteger(n) || n < 0) throw new Error("Invalid n");
     }
     return {clusterId: clusterId, height: height, n: n};
-
   }
-
 
   clusterTransactions = async (req:Request, res:Response) => {
     let clusterId: number = Number(req.params.id);
@@ -106,10 +103,9 @@ export class ClusterController {
       res.sendStatus(400);
       return;
     }
+
     if (!options.lt && !options.lte) options.lt = {clusterId: clusterId+1};
     if (!options.gt && !options.gte) options.gt = {clusterId: clusterId};
-
-    
 
     let redirectToCluster = await this.redirectToCluster(clusterId);
     if (redirectToCluster !== undefined) {
@@ -154,7 +150,6 @@ export class ClusterController {
       address = components[1];
     }
     return {clusterId: clusterId, balance: balance, address: address};
-
   }
 
   clusterAddresses = async (req:Request, res:Response) => {
@@ -191,7 +186,6 @@ export class ClusterController {
       if (queryPos >= 0) newPath += req.url.substr(queryPos);
       res.redirect(301, newPath);
     } else {
-
       res.contentType('application/json');
       res.write('[');
       let first = true;
@@ -213,7 +207,7 @@ export class ClusterController {
         console.log("destroyed");
       });
     }  
-  };
+  }
 
   private decodeBalanceClusterIdToken(str?: string): {balance: number, clusterId?: number} {
     if (str === undefined) return;
@@ -253,7 +247,6 @@ export class ClusterController {
       res.sendStatus(400);
       return;
     }
-
     res.write('[');
     let first = true;
     let stream = this.balanceToClusterTable.createReadStream(options)
@@ -277,7 +270,6 @@ export class ClusterController {
 
   candleSticks = async (req:Request, res:Response) => {
     let clusterId: number = Number(req.params.id);
-
     let redirectToCluster = await this.redirectToCluster(clusterId);
     if (redirectToCluster !== undefined) {
       let newPath = req.baseUrl+req.route.path.replace(':id', redirectToCluster);
@@ -291,9 +283,6 @@ export class ClusterController {
       res.write('[');
       let first = true;
       let previousCandle: {open: number, close: number, low: number, high: number, date: number};
-
-
-
       let toTxAndTimePromise = new Transform({
         objectMode: true,
         transform: async (data: {key: {height: number, n: number}, value: {txid: string, balanceChange: number}} , encoding, callback) => {
@@ -335,8 +324,7 @@ export class ClusterController {
           callback(null);
         }
       });
-
-
+      
       let stream = this.clusterTransactionTable.createReadStream({
         lt: {clusterId: clusterId+1}, 
         gt: {clusterId: clusterId}

@@ -1,7 +1,8 @@
 export class ClusterAddress {
 
+  constructor(
+    public balance?: number, 
+    public address?: string
+  ) {}
 
-  constructor(public balance?: number,
-  public address?: string) {
-  }  
 }

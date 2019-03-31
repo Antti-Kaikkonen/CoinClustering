@@ -26,14 +26,12 @@ export class Block extends BlockWithoutTransactions {
   tx: string[];
 }  
 
-
 export class BlockWithTransactions extends BlockWithoutTransactions {
   constructor(block: BlockWithoutTransactions, public tx: Transaction[]) {
     super();
     Object.assign(this, block);
     this.tx = tx;
   }
-
 }  
 
 export class BlockHeaders {

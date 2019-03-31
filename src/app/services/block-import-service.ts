@@ -23,7 +23,6 @@ import { ClusterTransactionService } from "./cluster-transaction-service";
 @injectable()
 export class BlockImportService {
 
-
   constructor(private db: BinaryDB,
     private clusterAddressService: ClusterAddressService, 
     private clusterTransactionService: ClusterTransactionService,
@@ -46,7 +45,6 @@ export class BlockImportService {
   lastMergedHeight: number;
   lastSavedTxHeight: number;
   nextClusterId: number;
-
 
   private async addressBalanceChangesToClusterBalanceChanges(addressToDelta: Map<string, number>): Promise<Map<number, number>> {
     let promises = [];
@@ -91,14 +89,12 @@ export class BlockImportService {
       }  
     }
     await Promise.all(promises);
-
     await this.db.writeBatchService.push(
       this.lastMergedHeightTable.putOperation(undefined, {height:lastBlockHeight})
     );
     await this.db.writeBatchService.push(
       this.nextClusterIdTable.putOperation(undefined, {nextClusterId: await this.getNextClusterId()})
     );
-
     await this.db.writeBatchService.commit();
   }
 

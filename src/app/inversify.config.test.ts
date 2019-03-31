@@ -7,7 +7,7 @@ import { BinaryDB } from "./services/binary-db";
 let cwd = process.cwd();
 const config: any = require(cwd+'/config');
 
-const myContainer = new Container({ autoBindInjectable: true });
+const myContainer = new Container({ autoBindInjectable: true, defaultScope: "Singleton" });
 myContainer.bind<string>("string").toConstantValue(config.protocol).whenTargetNamed("protocol");
 myContainer.bind<string>("string").toConstantValue(config.user).whenTargetNamed("user");
 myContainer.bind<string>("string").toConstantValue(config.pass).whenTargetNamed("pass");
@@ -26,8 +26,6 @@ let db: BinaryDB = new BinaryDB(EncodingDown<Buffer, Buffer>(rocksdb, {keyEncodi
   compression: true
 });
 myContainer.bind<BinaryDB>(BinaryDB).toConstantValue(db);
-
-
 
 export { myContainer };
 

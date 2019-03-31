@@ -17,8 +17,6 @@ import { BlockImportService } from './app/services/block-import-service';
 import { BlockTimeService } from './app/services/block-time-service';
 import { BlockchainReader } from './app/services/blockchain-reader';
 
-
-
 //export NODE_OPTIONS="--max_old_space_size=8192"
 
 //export NODE_OPTIONS="--max_old_space_size=16384"

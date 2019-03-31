@@ -7,18 +7,15 @@ import { ClusterAddressTable } from '../tables/cluster-address-table';
 import { AddressService } from './address-service';
 import { BinaryDB } from './binary-db';
 
-
 @injectable()
 export class ClusterAddressService {
-
 
   constructor(private db: BinaryDB,  
     private addressService: AddressService,
     private clusterAddressTable: ClusterAddressTable,
     private clusterAddressCountTable: ClusterAddressCountTable,
     private addressClusterTable: AddressClusterTable,
-  ) {
-  }  
+  ) {}  
 
   async getAddressCountDefaultUndefined(clusterId: number): Promise<number> {
     try {
@@ -126,7 +123,7 @@ export class ClusterAddressService {
     for (const [index, address] of addresses.entries()) {
       await this.db.writeBatchService.push(this.clusterAddressTable.putOperation({clusterId: clusterId, balance: 0, address: address}, {}));
       await this.db.writeBatchService.push(this.addressClusterTable.putOperation({address: address}, {clusterId: clusterId}));
-    };
+    }
   }
 
   async createAddressClustersOps(clusterAddresses: string[], clusterId: number): Promise<void> {
@@ -141,7 +138,7 @@ export class ClusterAddressService {
       await this.db.writeBatchService.push(
         this.addressClusterTable.putOperation({address: address}, {clusterId: clusterId})
       );
-    };
+    }
   }  
 
 }  

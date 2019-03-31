@@ -5,4 +5,3 @@ const TYPES = {
 };
 
 export { TYPES };
-

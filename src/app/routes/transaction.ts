@@ -6,6 +6,5 @@ export default function(transactionController: TransactionController): Router {
   const router = Router();
   router.get('/:txid/cluster-balance-changes', expressWrapAsync(transactionController.txClusterBalnaceChanges));
   router.get('/:txid/details', expressWrapAsync(transactionController.txDetailed));
-  //router.get('/:txid', );TODO
   return router;
 }

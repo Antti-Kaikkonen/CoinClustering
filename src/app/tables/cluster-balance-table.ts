@@ -37,5 +37,4 @@ export class ClusterBalanceTable extends PrefixTable< { clusterId: number},
       };
     }
   };
-
 }  

@@ -4,15 +4,11 @@ import crypto from 'crypto';
 import { inject, injectable, named } from "inversify";
 import "reflect-metadata";
 
-
-
-
 //byte format will be prefixed with one of these
 const TYPE_PUBKEYHASH = 0;//20 bytes
 const TYPE_SCRIPTHASH = 1;//20 bytes
 const TYPE_witness_v0_keyhash = 2;//20 bytes
 const TYPE_witness_v0_scripthash = 3;//32 bytes
-
 
 function calculateDoubleSha256CheckSum(data: Buffer): Buffer {
   let first = crypto.createHash('sha256').update(data).digest();

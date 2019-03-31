@@ -5,7 +5,6 @@ import RpcApi from '../misc/rpc-api';
 import { BlockTimeTable } from '../tables/block-time-table';
 import { BlockImportService } from './block-import-service';
 
-
 @injectable()
 export class BlockTimeService {
 
@@ -95,4 +94,4 @@ export class BlockTimeService {
     return time;
   }
 
-}  
+}

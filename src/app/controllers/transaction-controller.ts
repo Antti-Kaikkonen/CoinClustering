@@ -17,7 +17,6 @@ export class TransactionController {
   ) {
   }  
 
-
   txDetailed = async (req:Request, res:Response) => {
     let txid: string = req.params.txid;
     let tx: Transaction = (await this.rpcApi.getTransactions([txid]))[0];
@@ -96,10 +95,9 @@ export class TransactionController {
       result.push({
         clusterId: clusterId,
         delta: delta
-      })
+      });
     });
     res.send(result);
-  }  
-
+  }
 
 }  

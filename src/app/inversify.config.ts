@@ -27,7 +27,5 @@ let db: BinaryDB = new BinaryDB(EncodingDown<Buffer, Buffer>(rocksdb, {keyEncodi
 });
 myContainer.bind<BinaryDB>(BinaryDB).toConstantValue(db);
 
-
-
 export { myContainer };
 

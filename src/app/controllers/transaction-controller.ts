@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { injectable } from "inversify";
 import RpcApi from "../misc/rpc-api";
 import { txAddressBalanceChanges, txAddresses } from "../misc/utils";
+import { ClusterId } from "../models/clusterid";
 import { Transaction } from "../models/transaction";
 import { ClusterAddressService } from "../services/cluster-address-service";
 import { AddressClusterTable } from "../tables/address-cluster-table";
@@ -41,8 +42,8 @@ export class TransactionController {
     }); 
     await attachInputsPromise;
     let txAddr = Array.from(txAddresses(tx));
-    let addressToClusterId: Map<string, number> = new Map();
-    let clusterIdPromises = [];
+    let addressToClusterId: Map<string, ClusterId> = new Map();
+    let clusterIdPromises: Promise<{clusterId:ClusterId}>[] = [];
     txAddr.forEach(address => {
       clusterIdPromises.push(this.addressClusterTable.get({address: address}));
     });
@@ -91,13 +92,14 @@ export class TransactionController {
     let balanceChanges: Map<string, number> = txAddressBalanceChanges(tx);
     let clusterBalanceChanges = await this.clusterAddressService.addressBalanceChangesToClusterBalanceChanges(balanceChanges);
     let result = [];
-    clusterBalanceChanges.forEach((delta: number, clusterId: number) => {
+    clusterBalanceChanges.forEach((delta: number, clusterId: string) => {
       result.push({
-        clusterId: clusterId,
+        clusterId: ClusterId.fromString(clusterId),
         delta: delta
       });
     });
     res.send(result);
   }
+
 
 }  

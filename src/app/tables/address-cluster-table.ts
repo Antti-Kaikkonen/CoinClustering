@@ -1,12 +1,12 @@
 import { injectable } from 'inversify';
-import * as lexi from 'lexint';
 import { db_address_cluster_prefix } from "../misc/db-constants";
+import { ClusterId } from '../models/clusterid';
 import { AddressEncodingService } from '../services/address-encoding-service';
 import { BinaryDB } from '../services/binary-db';
 import { PrefixTable } from './prefix-table';
 
 @injectable()
-export class AddressClusterTable extends PrefixTable< { address: string}, { clusterId: number }> {
+export class AddressClusterTable extends PrefixTable< { address: string}, { clusterId: ClusterId }> {
 
   constructor(db: BinaryDB, private addressEncodingService: AddressEncodingService) {
     super(db);
@@ -28,14 +28,14 @@ export class AddressClusterTable extends PrefixTable< { address: string}, { clus
   };
 
   valueencoding = {
-    encode: (key: { clusterId: number }): Buffer => {
+    encode: (key: { clusterId: ClusterId }): Buffer => {
       //console.log("addressClusterTable encode value", key, lexi.encode(key.clusterId));
-      return lexi.encode(key.clusterId);
+      return key.clusterId.encode();
     },
-    decode: (buf: Buffer): { clusterId: number } => {
+    decode: (buf: Buffer): { clusterId: ClusterId } => {
       //console.log("addressClusterTable decode value", buf, lexi.decode(buf).value, lexi.decode(buf).byteLength);
       return {
-        clusterId: lexi.decode(buf).value
+        clusterId: ClusterId.decode(buf).value
       };
     }
   };

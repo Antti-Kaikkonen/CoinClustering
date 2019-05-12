@@ -1,11 +1,12 @@
 import { injectable } from 'inversify';
 import * as lexi from 'lexint';
 import { db_cluster_balance_prefix } from "../misc/db-constants";
+import { ClusterId } from '../models/clusterid';
 import { BinaryDB } from '../services/binary-db';
 import { PrefixTable } from './prefix-table';
 
 @injectable()
-export class ClusterBalanceTable extends PrefixTable< { clusterId: number}, 
+export class ClusterBalanceTable extends PrefixTable< { clusterId: ClusterId}, 
 { balance: number }> {
 
   constructor(db: BinaryDB) {
@@ -15,12 +16,12 @@ export class ClusterBalanceTable extends PrefixTable< { clusterId: number},
   prefix = db_cluster_balance_prefix;
 
   keyencoding = {
-    encode: (key: { clusterId: number}): Buffer => {
-      return lexi.encode(key.clusterId);
+    encode: (key: { clusterId: ClusterId}): Buffer => {
+      return key.clusterId.encode();
     },
-    decode: (buf: Buffer): { clusterId: number} => {
+    decode: (buf: Buffer): { clusterId: ClusterId} => {
       return {
-        clusterId: lexi.decode(buf).value
+        clusterId: ClusterId.decode(buf).value
       };
     }
   };

@@ -1,11 +1,12 @@
 import { injectable } from 'inversify';
 import * as lexi from 'lexint';
 import { db_balace_to_cluster_prefix } from "../misc/db-constants";
+import { ClusterId } from '../models/clusterid';
 import { BinaryDB } from '../services/binary-db';
 import { PrefixTable } from './prefix-table';
 
 @injectable()
-export class BalanceToClusterTable extends PrefixTable< { balance: number, clusterId?: number}, 
+export class BalanceToClusterTable extends PrefixTable< { balance: number, clusterId?: ClusterId}, 
 {  }> {
 
 
@@ -15,16 +16,16 @@ export class BalanceToClusterTable extends PrefixTable< { balance: number, clust
 
   prefix = db_balace_to_cluster_prefix;
   keyencoding = {
-    encode: (key: { balance: number, clusterId: number}): Buffer => {
+    encode: (key: { balance: number, clusterId: ClusterId}): Buffer => {
       //console.log("encoding ", key);
       if (key.clusterId === undefined) 
         return Buffer.from(lexi.encode(key.balance));
       else
-        return Buffer.concat([Buffer.from(lexi.encode(key.balance)), lexi.encode(key.clusterId)]);
+        return Buffer.concat([Buffer.from(lexi.encode(key.balance)), key.clusterId.encode()]);
     },
-    decode: (buf: Buffer): { balance: number, clusterId: number} => {
+    decode: (buf: Buffer): { balance: number, clusterId: ClusterId} => {
       let balance = lexi.decode(buf, 0);
-      let clusterId = lexi.decode(buf, balance.byteLength);
+      let clusterId = ClusterId.decode(buf, balance.byteLength);
       return {
         balance: balance.value,
         clusterId: clusterId.value

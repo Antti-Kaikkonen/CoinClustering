@@ -23,6 +23,19 @@ export function txAddresses(tx: Transaction): Set<string> {
   return result;
 }
 
+export function txInputAddresses(tx: Transaction): Array<string> {
+  let result = [];
+  tx.vin.map(vin => vin.address).filter(address => address !== undefined).forEach(address => result.push(address));
+  return result;
+}
+
+export function txOutputAddresses(tx: Transaction): Array<string> {
+  let result = [];
+  tx.vout.filter(vout => vout.scriptPubKey.addresses && vout.scriptPubKey.addresses.length === 1 && vout.scriptPubKey.addresses[0])
+  .map(vout => vout.scriptPubKey.addresses[0]).forEach(address => result.push(address));
+  return result;
+}
+
 export function isMixingTx(tx: Transaction) {
   if (tx.vin.length < 2) return false;
   if (tx.vout.length !== tx.vin.length) return false;

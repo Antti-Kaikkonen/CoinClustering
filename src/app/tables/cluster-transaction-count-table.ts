@@ -1,11 +1,12 @@
 import { injectable } from 'inversify';
 import * as lexi from 'lexint';
 import { db_cluster_transaction_count_prefix } from '../misc/db-constants';
+import { ClusterId } from '../models/clusterid';
 import { BinaryDB } from '../services/binary-db';
 import { PrefixTable } from './prefix-table';
 
 @injectable()
-export class ClusterTransactionCountTable extends PrefixTable< { clusterId: number}, { transactionCount: number }> {
+export class ClusterTransactionCountTable extends PrefixTable< { clusterId: ClusterId}, { transactionCount: number }> {
 
   constructor(db: BinaryDB) {
     super(db);
@@ -14,13 +15,12 @@ export class ClusterTransactionCountTable extends PrefixTable< { clusterId: numb
   prefix = db_cluster_transaction_count_prefix;
 
   keyencoding = {
-    encode: (key: { clusterId: number}): Buffer => {
-        return lexi.encode(key.clusterId);
+    encode: (key: { clusterId: ClusterId}): Buffer => {
+        return key.clusterId.encode();
     },
-    decode: (buf: Buffer): { clusterId: number, addressIndex?: number} => {
-      let clusterId = lexi.decode(buf, 0).value;
+    decode: (buf: Buffer): { clusterId: ClusterId} => {
       return {
-        clusterId: clusterId
+        clusterId: ClusterId.decode(buf).value
       };
     }
   };

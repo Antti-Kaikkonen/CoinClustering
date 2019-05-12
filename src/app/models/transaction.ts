@@ -26,7 +26,7 @@ export class TransactionInput {
 
 export class TransactionOutput {
   value: number;
-  n: 1;
+  n: number;
   scriptPubKey: {
     asm: string;
     hex: string;

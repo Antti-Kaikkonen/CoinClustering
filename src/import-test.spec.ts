@@ -75,7 +75,7 @@ describe('Save a blocks with 3 transactions', () => {
               type: null,
               reqSigs: null,
             },
-            n: null
+            n: 0
           },
           {
             "value":10/100000000,
@@ -88,7 +88,7 @@ describe('Save a blocks with 3 transactions', () => {
               type: null,
               reqSigs: null,
             },
-            n: null
+            n: 1
           },
           {
             "value":10/100000000,
@@ -101,7 +101,7 @@ describe('Save a blocks with 3 transactions', () => {
               type: null,
               reqSigs: null,
             },
-            n: null
+            n: 2
           },
           {
             "value":10/100000000,
@@ -114,7 +114,7 @@ describe('Save a blocks with 3 transactions', () => {
               type: null,
               reqSigs: null,
             },
-            n: null
+            n: 3
           }
         ]
       },
@@ -143,7 +143,7 @@ describe('Save a blocks with 3 transactions', () => {
               type: null,
               reqSigs: null,
             },
-            n: null
+            n: 0
           },
           {
             "value":1/100000000,
@@ -156,7 +156,7 @@ describe('Save a blocks with 3 transactions', () => {
               type: null,
               reqSigs: null,
             },
-            n: null
+            n: 1
           }
         ]
       },
@@ -191,7 +191,7 @@ describe('Save a blocks with 3 transactions', () => {
               type: null,
               reqSigs: null,
             },
-            n: null
+            n: 0
           }
         ]
       }
@@ -201,7 +201,7 @@ describe('Save a blocks with 3 transactions', () => {
   it('address3 and address4 should be in the same cluster', async () => {
     let c1 = await addressService.getAddressCluster(address3);
     let c2 = await addressService.getAddressCluster(address4);
-    expect(c1).to.equal(c2);
+    expect(c1.toString()).to.equal(c2.toString());
   });
 
   it('address3 cluster should contain two addresses', async () => {

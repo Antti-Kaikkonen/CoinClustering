@@ -1,6 +1,7 @@
 import { injectable } from 'inversify';
 import { Writable } from 'stream';
 import { ClusterAddress } from '../models/cluster-address';
+import { ClusterId } from '../models/clusterid';
 import { AddressClusterTable } from '../tables/address-cluster-table';
 import { ClusterAddressCountTable } from '../tables/cluster-address-count-table';
 import { ClusterAddressTable } from '../tables/cluster-address-table';
@@ -17,7 +18,7 @@ export class ClusterAddressService {
     private addressClusterTable: AddressClusterTable,
   ) {}  
 
-  async getAddressCountDefaultUndefined(clusterId: number): Promise<number> {
+  async getAddressCountDefaultUndefined(clusterId: ClusterId): Promise<number> {
     try {
       return (await this.clusterAddressCountTable.get({clusterId: clusterId})).addressCount;
     } catch(err) {
@@ -28,32 +29,33 @@ export class ClusterAddressService {
     }
   }
 
-  async addressBalanceChangesToClusterBalanceChanges(addressToDelta: Map<string, number>): Promise<Map<number, number>> {
-    let clusterIdPromises: Promise<number>[] = [];
+  async addressBalanceChangesToClusterBalanceChanges(addressToDelta: Map<string, number>): Promise<Map<string, number>> {
+    let clusterIdPromises: Promise<ClusterId>[] = [];
     let addresses: string[] = [];
     addressToDelta.forEach((delta: number, address: string) => {
       addresses.push(address);
       clusterIdPromises.push(this.addressService.getAddressCluster(address));
     });
-    let clusterIds: number[] = await Promise.all(clusterIdPromises);
-    let clusterToDelta = new Map<number, number>();
+    let clusterIds: ClusterId[] = await Promise.all(clusterIdPromises);
+    let clusterToDelta = new Map<string, number>();
     addresses.forEach((address: string, index: number) => {
-      let clusterId: number = clusterIds[index];
+      let clusterId: ClusterId = clusterIds[index];
       if (clusterId === undefined) throw Error("Cluster missing");
-      let oldBalance = clusterToDelta.get(clusterId);
+      let oldBalance = clusterToDelta.get(clusterId.toString());
       let addressDelta = addressToDelta.get(address);
       if (!oldBalance) oldBalance = 0;
-      clusterToDelta.set(clusterId, oldBalance+addressDelta);
+      clusterToDelta.set(clusterId.toString(), oldBalance+addressDelta);
     });
     return clusterToDelta;
   }
 
-  async getClusterAddresses(clusterId: number): Promise<ClusterAddress[]> {
+  async getClusterAddresses(clusterId: ClusterId): Promise<ClusterAddress[]> {
     return new Promise<ClusterAddress[]>((resolve, reject) => {
       let addresses: ClusterAddress[] = [];
+      let nextCluster = new ClusterId(clusterId.height, clusterId.txN, clusterId.outputN+1);
       this.clusterAddressTable.createReadStream({
         gte: {clusterId: clusterId},
-        lt: {clusterId: clusterId+1}
+        lt: {clusterId: nextCluster}
       }).on('data', function (data) {
         let ca = new ClusterAddress(data.key.balance, data.key.address);
         addresses.push(ca);
@@ -69,7 +71,7 @@ export class ClusterAddressService {
     });
   }
 
-  async mergeClusterAddressesOps(toClusterId: number, fromClusterIds: number[], nonClusterAddresses?: string[]): Promise<void> {
+  async mergeClusterAddressesOps(toClusterId: ClusterId, fromClusterIds: ClusterId[], nonClusterAddresses?: string[]): Promise<void> {
     if (fromClusterIds.length === 0 && (nonClusterAddresses === undefined || nonClusterAddresses.length === 0)) return;
     let oldAddressCountPromise: Promise<number> = this.getAddressCountDefaultUndefined(toClusterId);
     let newAddressesCount = 0;
@@ -94,9 +96,10 @@ export class ClusterAddressService {
             callback(null);
           }
         });
+        let nextClusterId = new ClusterId(fromClusterId.height, fromClusterId.txN, fromClusterId.outputN+1);
         this.clusterAddressTable.createReadStream({
           gte: {clusterId: fromClusterId},
-          lt: {clusterId: fromClusterId+1}
+          lt: {clusterId: nextClusterId}
         }).pipe(addressMerger);
 
         addressMerger.on('finish', async () => {
@@ -119,15 +122,16 @@ export class ClusterAddressService {
     );
   }
 
-  async addAddressesToClusterOps(addresses: string[], clusterId: number): Promise<void> {
+  async addAddressesToClusterOps(addresses: string[], clusterId: ClusterId): Promise<void> {
     for (const [index, address] of addresses.entries()) {
       await this.db.writeBatchService.push(this.clusterAddressTable.putOperation({clusterId: clusterId, balance: 0, address: address}, {}));
       await this.db.writeBatchService.push(this.addressClusterTable.putOperation({address: address}, {clusterId: clusterId}));
     }
   }
 
-  async createAddressClustersOps(clusterAddresses: string[], clusterId: number): Promise<void> {
+  async createAddressClustersOps(clusterAddresses: string[], clusterId: ClusterId): Promise<void> {
     if (clusterAddresses.length === 0) throw new Error("createAddressClustersOps called with 0 addresses");
+    //console.log("createAddressClustersOps", clusterAddresses, clusterId);
     await this.db.writeBatchService.push(
       this.clusterAddressCountTable.putOperation({clusterId: clusterId}, {addressCount: clusterAddresses.length})
     );

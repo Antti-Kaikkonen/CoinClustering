@@ -1,6 +1,7 @@
 import { injectable } from 'inversify';
 import * as lexi from 'lexint';
 import { db_cluster_transaction_prefix } from "../misc/db-constants";
+import { ClusterId } from '../models/clusterid';
 import { BinaryDB } from '../services/binary-db';
 import { PrefixTable } from './prefix-table';
 
@@ -8,7 +9,7 @@ const TXID_BYTE_LENGTH = 32;
 const SIGN_NEGATIVE = 0;
 
 @injectable()
-export class ClusterTransactionTable extends PrefixTable< { clusterId: number, height?: number, n?: number}, 
+export class ClusterTransactionTable extends PrefixTable< { clusterId: ClusterId, height?: number, n?: number}, 
 { txid: string, balanceChange: number }> {
 
   constructor(db: BinaryDB) {
@@ -17,16 +18,16 @@ export class ClusterTransactionTable extends PrefixTable< { clusterId: number, h
 
   prefix = db_cluster_transaction_prefix;
   keyencoding = {
-    encode: (key: { clusterId: number, height?: number, n?: number}): Buffer => {
+    encode: (key: { clusterId: ClusterId, height?: number, n?: number}): Buffer => {
       if (key.height === undefined) 
-        return lexi.encode(key.clusterId);
+        return key.clusterId.encode();
       else if (key.n === undefined)
-        return Buffer.concat([lexi.encode(key.clusterId), lexi.encode(key.height)]);
+        return Buffer.concat([key.clusterId.encode(), lexi.encode(key.height)]);
       else 
-        return Buffer.concat([lexi.encode(key.clusterId), lexi.encode(key.height), lexi.encode(key.n)]);
+        return Buffer.concat([key.clusterId.encode(), lexi.encode(key.height), lexi.encode(key.n)]);
     },
-    decode: (buf: Buffer): { clusterId: number, height: number, n: number} => {
-      let clusterId = lexi.decode(buf, 0);
+    decode: (buf: Buffer): { clusterId: ClusterId, height: number, n: number} => {
+      let clusterId = ClusterId.decode(buf);
       let height = lexi.decode(buf, clusterId.byteLength);
       let n = lexi.decode(buf, clusterId.byteLength+height.byteLength);
       return {

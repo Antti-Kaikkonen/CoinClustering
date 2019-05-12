@@ -1,11 +1,11 @@
 import { injectable } from 'inversify';
-import * as lexi from 'lexint';
 import { db_cluster_merged_to } from "../misc/db-constants";
+import { ClusterId } from '../models/clusterid';
 import { BinaryDB } from '../services/binary-db';
 import { PrefixTable } from './prefix-table';
 
 @injectable()
-export class ClusterMergedToTable extends PrefixTable< { fromClusterId: number}, { toClusterId: number }> {
+export class ClusterMergedToTable extends PrefixTable< { fromClusterId: ClusterId}, { toClusterId: ClusterId }> {
 
   constructor(db: BinaryDB) {
     super(db);
@@ -14,25 +14,24 @@ export class ClusterMergedToTable extends PrefixTable< { fromClusterId: number},
   prefix = db_cluster_merged_to;
 
   keyencoding = {
-    encode: (key: { fromClusterId: number}): Buffer => {
-        return Buffer.from(lexi.encode(key.fromClusterId));
+    encode: (key: { fromClusterId: ClusterId}): Buffer => {
+        return key.fromClusterId.encode();
     },
-    decode: (buf: Buffer): { fromClusterId: number} => {
-      let clusterId = lexi.decode(buf, 0);
+    decode: (buf: Buffer): { fromClusterId: ClusterId} => {
       return {
-        fromClusterId: clusterId.value
+        fromClusterId: ClusterId.decode(buf).value
       };
     }
   };
 
   valueencoding = {
-    encode: (key: { toClusterId: number }): Buffer => {
-      return lexi.encode(key.toClusterId);
+    encode: (key: { toClusterId: ClusterId }): Buffer => {
+      return key.toClusterId.encode();
     },
-    decode: (buf: Buffer): { toClusterId: number } => {
+    decode: (buf: Buffer): { toClusterId: ClusterId } => {
       return {
-        toClusterId: lexi.decode(buf).value
-      };  
+        toClusterId: ClusterId.decode(buf).value
+      };
     }
   };
 }

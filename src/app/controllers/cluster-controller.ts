@@ -4,6 +4,7 @@ import { Transform, Writable } from 'stream';
 import RestApi from '../misc/rest-api';
 import RpcApi from '../misc/rpc-api';
 import { ClusterTransaction } from '../models/cluster-transaction';
+import { ClusterId } from '../models/clusterid';
 import { BlockTimeService } from '../services/block-time-service';
 import { ClusterAddressService } from '../services/cluster-address-service';
 import { ClusterTransactionService } from '../services/cluster-transaction-service';
@@ -27,7 +28,8 @@ export class ClusterController {
     private restApi: RestApi) {
   }  
 
-  private async redirectToCluster(clusterId: number): Promise<number> {
+
+  private async redirectToCluster(clusterId: ClusterId): Promise<ClusterId> {
     try {
       return (await this.clusterMergedToTable.get({fromClusterId: clusterId})).toClusterId;
     } catch(err) {
@@ -37,10 +39,10 @@ export class ClusterController {
   }
 
   clusterInfo = async (req: Request, res: Response) => {
-    let clusterId: number = Number(req.params.id);
+    let clusterId: ClusterId = ClusterId.fromString(req.params.id);
     let redirectToCluster = await this.redirectToCluster(clusterId);
     if (redirectToCluster !== undefined) {
-      let newPath = req.baseUrl+req.route.path.replace(':id', redirectToCluster);
+      let newPath = req.baseUrl+req.route.path.replace(':id', redirectToCluster.toString());
       let queryPos = req.url.indexOf("?");
       if (queryPos >= 0) newPath += req.url.substr(queryPos);
       res.redirect(301, newPath);
@@ -65,7 +67,7 @@ export class ClusterController {
     }  
   }
 
-  private decodeHeightAndNToken(clusterId: number, str?: string): {clusterId: number, height: number, n?: number} {
+  private decodeHeightAndNToken(clusterId: ClusterId, str?: string): {clusterId: ClusterId, height: number, n?: number} {
     if (str === undefined) return;
     let components = str.split('-');
     if (components.length > 2) throw new Error("Too many components");
@@ -80,8 +82,7 @@ export class ClusterController {
   }
 
   clusterTransactions = async (req:Request, res:Response) => {
-    let clusterId: number = Number(req.params.id);
-
+    let clusterId: ClusterId = ClusterId.fromString(req.params.id);
     let limit = req.query.limit !== undefined ? Number(req.query.limit) : 100;
     if (!Number.isInteger(limit) || limit <= 0 || limit > 1000) {
       res.sendStatus(400);
@@ -104,12 +105,13 @@ export class ClusterController {
       return;
     }
 
-    if (!options.lt && !options.lte) options.lt = {clusterId: clusterId+1};
+    let nextClusterId = new ClusterId(clusterId.height, clusterId.txN, clusterId.outputN+1);
+    if (!options.lt && !options.lte) options.lt = {clusterId: nextClusterId};
     if (!options.gt && !options.gte) options.gt = {clusterId: clusterId};
 
     let redirectToCluster = await this.redirectToCluster(clusterId);
     if (redirectToCluster !== undefined) {
-      let newPath = req.baseUrl+req.route.path.replace(':id', redirectToCluster);
+      let newPath = req.baseUrl+req.route.path.replace(':id', redirectToCluster.toString());
       let queryPos = req.url.indexOf("?");
       if (queryPos >= 0) newPath += req.url.substr(queryPos);
       res.redirect(301, newPath);
@@ -139,7 +141,7 @@ export class ClusterController {
     }
   };
 
-  private decodeBalanceAndAddressToken(clusterId: number, str?: string): {clusterId: number, balance: number, address?: string} {
+  private decodeBalanceAndAddressToken(clusterId: ClusterId, str?: string): {clusterId: ClusterId, balance: number, address?: string} {
     if (str === undefined) return;
     let components = str.split('-');
     if (components.length > 2) throw new Error("Too many components");
@@ -153,7 +155,7 @@ export class ClusterController {
   }
 
   clusterAddresses = async (req:Request, res:Response) => {
-    let clusterId: number = Number(req.params.id);
+    let clusterId: ClusterId = ClusterId.fromString(req.params.id);
 
     let limit = req.query.limit !== undefined ? Number(req.query.limit) : 100;
     if (!Number.isInteger(limit) || limit <= 0 || limit > 1000) {
@@ -176,12 +178,13 @@ export class ClusterController {
       res.sendStatus(400);
       return;
     }
-    if (!options.lt && !options.lte) options.lt = {clusterId: clusterId+1};
+    let nextClusterId = new ClusterId(clusterId.height, clusterId.txN, clusterId.outputN+1);
+    if (!options.lt && !options.lte) options.lt = {clusterId: nextClusterId};
     if (!options.gt && !options.gte) options.gt = {clusterId: clusterId};
 
     let redirectToCluster = await this.redirectToCluster(clusterId);
     if (redirectToCluster !== undefined) {
-      let newPath = req.baseUrl+req.route.path.replace(':id', redirectToCluster);
+      let newPath = req.baseUrl+req.route.path.replace(':id', redirectToCluster.toString());
       let queryPos = req.url.indexOf("?");
       if (queryPos >= 0) newPath += req.url.substr(queryPos);
       res.redirect(301, newPath);
@@ -269,10 +272,10 @@ export class ClusterController {
   }
 
   candleSticks = async (req:Request, res:Response) => {
-    let clusterId: number = Number(req.params.id);
+    let clusterId: ClusterId = ClusterId.fromString(req.params.id);
     let redirectToCluster = await this.redirectToCluster(clusterId);
     if (redirectToCluster !== undefined) {
-      let newPath = req.baseUrl+req.route.path.replace(':id', redirectToCluster);
+      let newPath = req.baseUrl+req.route.path.replace(':id', redirectToCluster.toString());
       let queryPos = req.url.indexOf("?");
       if (queryPos >= 0) newPath += req.url.substr(queryPos);
       res.redirect(301, newPath);
@@ -324,9 +327,11 @@ export class ClusterController {
           callback(null);
         }
       });
-      
+
+
+      let nextClusterId = new ClusterId(clusterId.height, clusterId.txN, clusterId.outputN+1);
       let stream = this.clusterTransactionTable.createReadStream({
-        lt: {clusterId: clusterId+1}, 
+        lt: {clusterId: nextClusterId}, 
         gt: {clusterId: clusterId}
       });
       stream.pipe(toTxAndTimePromise).pipe(writer).on('finish', () => {

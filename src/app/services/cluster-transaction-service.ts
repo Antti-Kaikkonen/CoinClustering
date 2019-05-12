@@ -1,6 +1,7 @@
 import { injectable } from 'inversify';
 import { Writable } from 'stream';
 import { ClusterTransaction } from '../models/cluster-transaction';
+import { ClusterId } from '../models/clusterid';
 import { BalanceToClusterTable } from '../tables/balance-to-cluster-table';
 import { ClusterBalanceTable } from '../tables/cluster-balance-table';
 import { ClusterTransactionCountTable } from '../tables/cluster-transaction-count-table';
@@ -17,7 +18,7 @@ export class ClusterTransactionService {
     private clusterTransactionCountTable: ClusterTransactionCountTable
   ) {}  
 
-  async getClusterTransactionCountDefaultZero(clusterId: number): Promise<number> {
+  async getClusterTransactionCountDefaultZero(clusterId: ClusterId): Promise<number> {
     try {
       return (await this.clusterTransactionCountTable.get({clusterId: clusterId})).transactionCount;
     } catch (err) {
@@ -28,7 +29,7 @@ export class ClusterTransactionService {
     }
   }
 
-  async getClusterBalanceDefaultUndefined(clusterId: number): Promise<number> {
+  async getClusterBalanceDefaultUndefined(clusterId: ClusterId): Promise<number> {
     return new Promise<number>((resolve, reject) => {
       this.clusterBalanceTable.get({clusterId: clusterId}).then((res: {balance: number}) => {
         resolve(res.balance);
@@ -42,18 +43,19 @@ export class ClusterTransactionService {
     });
   }
 
-  async getClusterBalanceDefaultZero(clusterId: number): Promise<number> {
+  async getClusterBalanceDefaultZero(clusterId: ClusterId): Promise<number> {
     let res = await this.getClusterBalanceDefaultUndefined(clusterId);
     if (res === undefined) res = 0;
     return res;
   }
 
-  async getFirstClusterTransaction(clusterId: number): Promise<ClusterTransaction> {
+  async getFirstClusterTransaction(clusterId: ClusterId): Promise<ClusterTransaction> {
     return new Promise<ClusterTransaction>((resolve, reject) => {
       let transaction;
+      let nextClusterId = new ClusterId(clusterId.height, clusterId.txN, clusterId.outputN+1);
       this.clusterTransactionTable.createReadStream({
         gte: {clusterId: clusterId},
-        lt: {clusterId: clusterId+1},
+        lt: {clusterId: nextClusterId},
         limit: 1
       }).on("data", function(data) {
         transaction = new ClusterTransaction(
@@ -70,12 +72,13 @@ export class ClusterTransactionService {
     });
   }
 
-  async getLastClusterTransaction(clusterId: number): Promise<ClusterTransaction> {
+  async getLastClusterTransaction(clusterId: ClusterId): Promise<ClusterTransaction> {
     return new Promise<ClusterTransaction>((resolve, reject) => {
       let transaction;
+      let nextClusterId = new ClusterId(clusterId.height, clusterId.txN, clusterId.outputN+1);
       this.clusterTransactionTable.createReadStream({
         gte: {clusterId: clusterId},
-        lt: {clusterId: clusterId+1},
+        lt: {clusterId: nextClusterId},
         limit: 1,
         reverse: true
       }).on("data", function(data) {
@@ -94,7 +97,7 @@ export class ClusterTransactionService {
     });
   }
 
-  async getClusterTransactionDefaultUndefined(clusterId: number, height: number, n: number): Promise<ClusterTransaction> {
+  async getClusterTransactionDefaultUndefined(clusterId: ClusterId, height: number, n: number): Promise<ClusterTransaction> {
     try {
       let value = await this.clusterTransactionTable.get({clusterId: clusterId, height: height, n: n});
       let cb = new ClusterTransaction(value.txid, height, n, value.balanceChange);
@@ -108,12 +111,13 @@ export class ClusterTransactionService {
     }
   }
 
-  async getClusterTransactions(clusterId: number): Promise<ClusterTransaction[]> {
+  async getClusterTransactions(clusterId: ClusterId): Promise<ClusterTransaction[]> {
     return new Promise<ClusterTransaction[]>((resolve, reject) => {
       let transactions = [];
+      let nextClusterId = new ClusterId(clusterId.height, clusterId.txN, clusterId.outputN+1);
       this.clusterTransactionTable.createReadStream({
         gte: {clusterId: clusterId},
-        lt: {clusterId: clusterId+1}
+        lt: {clusterId: nextClusterId}
       }).on("data", function(data) {
         let cb = new ClusterTransaction(
           data.value.txid,
@@ -133,7 +137,7 @@ export class ClusterTransactionService {
     });
   }
 
-  async mergeClusterTransactionsOps(toCluster: number, ...fromClusters: number[]): Promise<void> {
+  async mergeClusterTransactionsOps(toCluster: ClusterId, ...fromClusters: ClusterId[]): Promise<void> {
     if (fromClusters.length === 0) return;
     let toClusterBalancePromsie = this.getClusterBalanceDefaultZero(toCluster);
     let toClusterTransactionCountPromise = this.getClusterTransactionCountDefaultZero(toCluster);
@@ -173,9 +177,10 @@ export class ClusterTransactionService {
           }
         });
 
+        let nextClusterId = new ClusterId(fromCluster.height, fromCluster.txN, fromCluster.outputN+1);
         this.clusterTransactionTable.createReadStream({
           gte: {clusterId: fromCluster},
-          lt: {clusterId: fromCluster+1}
+          lt: {clusterId: nextClusterId}
         }).pipe(txMerger);
 
         txMerger.on('finish', async () => {
@@ -232,7 +237,7 @@ export class ClusterTransactionService {
     }
   }
 
-  async mergeClusterTransactions(toCluster: number, ...fromClusters: number[]) {
+  async mergeClusterTransactions(toCluster: ClusterId, ...fromClusters: ClusterId[]) {
     await this.mergeClusterTransactionsOps(toCluster, ...fromClusters);
     await this.db.writeBatchService.commit();
   }

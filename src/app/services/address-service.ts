@@ -1,4 +1,5 @@
 import { injectable } from "inversify";
+import { ClusterId } from "../models/clusterid";
 import { AddressBalanceTable } from "../tables/address-balance-table";
 import { AddressClusterTable } from "../tables/address-cluster-table";
 
@@ -20,7 +21,7 @@ export class AddressService {
     }  
   }
 
-  async getAddressCluster(address: string): Promise<number> {
+  async getAddressCluster(address: string): Promise<ClusterId> {
     return (await this.addressClusterTable.get({address: address})).clusterId;
   }
 

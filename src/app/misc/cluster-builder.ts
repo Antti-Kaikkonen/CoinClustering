@@ -1,5 +1,6 @@
 import { Cluster } from "../models/cluster";
-import { Transaction } from "../models/transaction";
+import { ClusterId } from "../models/clusterid";
+import { Transaction, TransactionOutput } from "../models/transaction";
 import { AddressClusterTable } from "../tables/address-cluster-table";
 import { txAddresses, txAddressesToCluster } from "./utils";
 
@@ -9,15 +10,17 @@ export class ClusterBuilder {
 
   }
 
-  addressToClusterPromise: Map<string, Promise<number>> = new Map();
-  addressToClusterId: Map<string, number> = new Map();
+  addressToClusterPromise: Map<string, Promise<ClusterId>> = new Map();
+  addressToClusterId: Map<string, ClusterId> = new Map();
 
-  clusterIdToCluster: Map<number, Cluster> = new Map();
+  clusterIdToCluster: Map<string, Cluster> = new Map();//key=clusterId.toString();
   clusterAddressToCluster: Map<string, Cluster> = new Map();
+
+  addressToFirstOutput: Map<string, ClusterId> = new Map();
 
   txProcessedPromises = [];
 
-  private async getClusterId(address: string): Promise<number> {
+  private async getClusterId(address: string): Promise<ClusterId> {
     try {
       return (await this.addressClusterTable.get({address: address})).clusterId;
     } catch(err) {
@@ -29,52 +32,82 @@ export class ClusterBuilder {
 
   private mergeClusters(fromCluster: Cluster, toCluster: Cluster) {
     toCluster.mergeFrom(fromCluster);
-    fromCluster.clusterIds.forEach(clusterId => this.clusterIdToCluster.set(clusterId, toCluster));
+    fromCluster.clusterIds.forEach(clusterId => this.clusterIdToCluster.set(clusterId.toString(), toCluster));
     fromCluster.addresses.forEach(address => this.clusterAddressToCluster.set(address, toCluster));
   }
 
-  private onTxClusterIdsResolved(tx: Transaction) {
-    let newCluster: Cluster = new Cluster();
+  private onTxClusterIdsResolved(tx: Transaction, height: number, txN: number) {
+    let newCluster: Cluster = new Cluster([], []);
+    //console.log("onTxClusterIdsResolved", height, txN);
+    /*tx.vout.forEach((vout:TransactionOutput) => {
+      if (vout.scriptPubKey.addresses && vout.scriptPubKey.addresses.length === 1 && vout.scriptPubKey.addresses[0]) {
+        let address = vout.scriptPubKey.addresses[0];
+        let clusterId = this.addressToClusterId.get(address);
+        if (clusterId === undefined) {
+          let clusterId = new ClusterId(height, txN, vout.n);
+          this.clusterAddressToCluster.set(address, new Cluster([address], [], clusterId));
+        }  
+      }
+    });*/
+
     let txAddrToCluster = txAddressesToCluster(tx);
+
+
     let txAddr = txAddresses(tx);
-    for (let address of txAddr) {
+    let txAddrArray = Array.from(txAddr);
+    //txAddrArray.sort();
+    txAddrArray.forEach(address => {
       let shouldCluster = txAddrToCluster.has(address);
       let clusterId = this.addressToClusterId.get(address);
       if (clusterId !== undefined) {
-        if (!shouldCluster) continue;
-        let intersectingCluster = this.clusterIdToCluster.get(clusterId);
+        if (!shouldCluster) return;
+        let intersectingCluster = this.clusterIdToCluster.get(clusterId.toString());
         if (intersectingCluster !== undefined) {
-          if (intersectingCluster === newCluster) continue;
+          if (intersectingCluster === newCluster) return;
           this.mergeClusters(intersectingCluster, newCluster);
         } else {
           newCluster.clusterIds.push(clusterId);
-          this.clusterIdToCluster.set(clusterId, newCluster);
+          this.clusterIdToCluster.set(clusterId.toString(), newCluster);
         }
       } else {
         let intersectingCluster = this.clusterAddressToCluster.get(address);
         if (intersectingCluster !== undefined) {
-          if (intersectingCluster === newCluster) continue;
-          if (!shouldCluster) continue;
+          if (intersectingCluster === newCluster) return;
+          if (!shouldCluster) return;
           this.mergeClusters(intersectingCluster, newCluster);
         } else {
           if (!shouldCluster) {
-            this.clusterAddressToCluster.set(address, new Cluster([address]));
+            //let ci = this.addressToFirstOutput.get(address);
+            //throw new Error("gdflkjgldfkjglkdf"+height+","+txN+","+address);//TODO: Fix when mixing transaction input is evaluated before the spent output transaction
+            this.clusterAddressToCluster.set(address, new Cluster([address], [], this.addressToFirstOutput.get(address)));
+            //console.log("this.addressToFirstOutput.get(address)", this.addressToFirstOutput.get(address));
           } else {
             newCluster.addresses.push(address);
+            let ci = this.addressToFirstOutput.get(address);
+            newCluster.updateLowestClusterId(ci);
             this.clusterAddressToCluster.set(address, newCluster);
           }
-        }  
+        }
       }
-    }
+    });
   }
 
-  add(tx:Transaction) {
+  add(tx:Transaction, height: number, txN: number) {
+
     let txAddr = txAddresses(tx);
+
+    tx.vout.forEach((vout:TransactionOutput) => {
+      if (vout.scriptPubKey.addresses && vout.scriptPubKey.addresses.length === 1 && vout.scriptPubKey.addresses[0]) {
+        let address = vout.scriptPubKey.addresses[0];
+        let clusterId = new ClusterId(height, txN, vout.n);
+        if (!this.addressToFirstOutput.has(address)) this.addressToFirstOutput.set(address, clusterId);
+      }
+    });
 
     let txProcessedPromise = new Promise((resolve, reject) => {
       let addressesToResolve: number = txAddr.size;
       if(addressesToResolve === 0) {
-        console.log("tx has no addresses?"+ JSON.stringify(tx));
+        /*console.log("tx has no addresses?"+ JSON.stringify(tx));*/
         resolve();
       }
       txAddr.forEach(address => {
@@ -83,11 +116,11 @@ export class ClusterBuilder {
           promise = this.getClusterId(address);
           this.addressToClusterPromise.set(address, promise);
         }  
-        promise.then((clusterId: number) => {
+        promise.then((clusterId: ClusterId) => {
           this.addressToClusterId.set(address, clusterId);
           addressesToResolve--;
           if (addressesToResolve === 0) {
-            this.onTxClusterIdsResolved(tx);
+            this.onTxClusterIdsResolved(tx, height, txN);
             resolve();
             return;
           }

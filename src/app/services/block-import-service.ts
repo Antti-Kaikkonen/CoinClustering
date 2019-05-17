@@ -15,7 +15,6 @@ import { ClusterTransactionCountTable } from "../tables/cluster-transaction-coun
 import { ClusterTransactionTable } from "../tables/cluster-transaction-table";
 import { LastMergedHeightTable } from "../tables/last-merged-height-table";
 import { LastSavedTxHeightTable } from "../tables/last-saved-tx-height-table";
-//import { NextClusterIdTable } from "../tables/next-cluster-id-table";
 import { AddressService } from "./address-service";
 import { BinaryDB } from "./binary-db";
 import { ClusterAddressService } from "./cluster-address-service";
@@ -30,7 +29,6 @@ export class BlockImportService {
     private addressService: AddressService,
     private addressClusterTable: AddressClusterTable,
     private clusterMergedToTable: ClusterMergedToTable,
-    //private nextClusterIdTable: NextClusterIdTable,
     private lastMergedHeightTable: LastMergedHeightTable,
     private lastSavedTxHeightTable: LastSavedTxHeightTable,
     private clusterTransactionTable: ClusterTransactionTable,
@@ -51,9 +49,7 @@ export class BlockImportService {
     for (let cluster of clusters) {
       let clusterIds: ClusterId[] = cluster.clusterIdsSorted();
       if (clusterIds.length === 0) {
-        //console.log(lastBlockHeight.toString(),"creating cluster", cluster.addresses, cluster.lowestClusterId);
-        await this.clusterAddressService.createAddressClustersOps(cluster.addresses, cluster.lowestClusterId/*await this.getNextClusterId()*/);
-        //this.nextClusterId++;
+        await this.clusterAddressService.createAddressClustersOps(cluster.addresses, cluster.lowestClusterId);
       } else {
         let toClusterId = clusterIds[0];
         let fromClusters = clusterIds.slice(1);
@@ -73,11 +69,6 @@ export class BlockImportService {
     await this.db.writeBatchService.push(
       this.lastMergedHeightTable.putOperation(undefined, {height:lastBlockHeight})
     );
-    /*await this.db.writeBatchService.push(
-      this.nextClusterIdTable.putOperation(undefined, {nextClusterId: await this.getNextClusterId()})
-
-    );*/
-
     await this.db.writeBatchService.commit();
   }
 
@@ -107,7 +98,7 @@ export class BlockImportService {
     console.log(block.height, "saving transactions");
     if (block.height <= await this.getLastSavedTxHeight()) {
       console.log("already saved");
-      return;// [];//already saved
+      return;
     }  
     let blockAddresses: Set<string> = new Set();
     for (let tx of block.tx) {
@@ -169,11 +160,9 @@ export class BlockImportService {
         await this.db.writeBatchService.push(
           this.addressTransactionTable.putOperation({address: address, height: block.height, n: txN}, {txid: tx.txid, balance: addressBalance})
         );
-      //addressBalanceChanges.forEach((delta: number, address: string) => {
         if (address === undefined) throw new Error("undefined address");
         let clusterId: string = addressToClusterId.get(address);
         if (clusterId === undefined) throw new Error("undefined clusterid for address " + address);
-        //TODO update address balance
         let oldDelta = clusterIdToDelta.get(clusterId);
         if (oldDelta === undefined) oldDelta = 0;
         clusterIdToDelta.set(clusterId, oldDelta+delta);
@@ -247,17 +236,6 @@ export class BlockImportService {
     }
     return this.lastSavedTxHeight;
   }
-
-  /*private async getNextClusterId(): Promise<number> {
-    if (this.nextClusterId === undefined) {
-      try {
-        this.nextClusterId = (await this.nextClusterIdTable.get(undefined)).nextClusterId;
-      } catch(err) {
-        this.nextClusterId = 0;
-      }
-    }
-    return this.nextClusterId;
-  }*/
 
   async saveBlock(block: BlockWithTransactions) {
     console.log("saving block ");

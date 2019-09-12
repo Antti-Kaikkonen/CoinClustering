@@ -35,7 +35,7 @@
     "@types/express": "^4.16.0",
     "@types/leveldown": "^4.0.0",
     "@types/levelup": "^3.1.0",
-    "@types/mocha": "^5.2.5",
+    "@types/mocha": "^5.2.7",
     "@types/node": "^10.12.30",
     "@types/varint": "^5.0.0",
     "chai": "^4.2.0",

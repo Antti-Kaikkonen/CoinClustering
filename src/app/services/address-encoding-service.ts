@@ -9,6 +9,7 @@ const TYPE_PUBKEYHASH = 0;//20 bytes
 const TYPE_SCRIPTHASH = 1;//20 bytes
 const TYPE_witness_v0_keyhash = 2;//20 bytes
 const TYPE_witness_v0_scripthash = 3;//32 bytes
+//nonstandard witness versions (1 to 16) are stored as 3+version
 
 function calculateDoubleSha256CheckSum(data: Buffer): Buffer {
   let first = crypto.createHash('sha256').update(data).digest();
@@ -26,13 +27,15 @@ export class AddressEncodingService {
   }
 
   addressToBytes(address: string): Buffer {
-    if (this.segwitprefix && address.startsWith(this.segwitprefix) && address.length > 35) {
+    if (this.segwitprefix && address.startsWith(this.segwitprefix)) {
       let decoded = bech32.decode(address);
       let version = decoded.words[0];
-      if (version !== 0) throw new Error("Only witness version 0 supported");
       let data = decoded.words.slice(1);
       let witness_program_data = bech32.fromWords(data);
-      if (witness_program_data.length === 20) {
+      if (version > 0) {//nonstandard witness version
+        let witness_data_length = witness_program_data.length;
+        return Buffer.from([3+version].concat([witness_data_length], witness_program_data));
+      } else if (witness_program_data.length === 20) {
         return Buffer.from([TYPE_witness_v0_keyhash].concat(witness_program_data));
       } else if (witness_program_data.length === 32) {
         return Buffer.from([TYPE_witness_v0_scripthash].concat(witness_program_data));
@@ -75,6 +78,11 @@ export class AddressEncodingService {
       if (!this.segwitprefix) throw new Error("Can't encode without segwitprefix")
       let witness_program_data = bytes.slice(offset+1, offset+33);
       return bech32.encode(this.segwitprefix, [0].concat(bech32.toWords(witness_program_data)));
+    } else if (type > 3) { //nonstandard witness version (1 to 16). Witness version = type-3
+      if (!this.segwitprefix) throw new Error("Can't encode without segwitprefix")
+      let witness_data_length = bytes[offset+1];
+      let witness_program_data = bytes.slice(offset+2, offset+2+witness_data_length);
+      return bech32.encode(this.segwitprefix, [type-3].concat(bech32.toWords(witness_program_data)));
     }
   }
 

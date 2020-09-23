@@ -58,6 +58,7 @@ Indexing the bitcoin blockchain can take more or less than a week depending on y
 ### Request
 `/clusters?limit=3&reverse=true&lte=10000000000000`
 ### Response
+**Documentation outdated:** clusterId is now in the form {height, txN, outputN} that refers to first transaction output belonging to a cluster
 ``` json
 [
   {
@@ -76,11 +77,11 @@ Indexing the bitcoin blockchain can take more or less than a week depending on y
 ```
 </details>
 <details>
- <summary>GET /clusters/:id/summary</summary>
+ <summary>GET /clusters/[height-txN-outputN]/summary</summary>
 
 ## Example
 ### Request
-`/clusters/17034506/summary`
+`/clusters/1-2-3/summary`
 ### Response
 ``` json
 {
@@ -100,7 +101,7 @@ Indexing the bitcoin blockchain can take more or less than a week depending on y
 ```
 </details>
 <details>
- <summary>GET /clusters/:id/transactions</summary>
+ <summary>GET /clusters/[height-txN-outputN]/transactions</summary>
 
 ## Query parameters
 * gt, gte, lt, lte (optional)
@@ -109,7 +110,7 @@ Indexing the bitcoin blockchain can take more or less than a week depending on y
 * include-delta (optional) = true/false, defalt: false
 ## Example
 ### Request
-`/clusters/17034506/transactions?limit=3&reverse=true&include-delta=true`
+`/clusters/1-2-3/transactions?limit=3&reverse=true&include-delta=true`
 ### Response
 ``` json
 [
@@ -135,7 +136,7 @@ Indexing the bitcoin blockchain can take more or less than a week depending on y
 ```
 </details>
 <details>
- <summary>GET /clusters/:id/addresses</summary>
+ <summary>GET /clusters/[height-txN-outputN]/addresses</summary>
 
 ## Query parameters
 * gt, gte, lt, lte (optional)
@@ -143,7 +144,7 @@ Indexing the bitcoin blockchain can take more or less than a week depending on y
 * limit (optional) = integer (0...1000), defalt: 100
 ## Example
 ### Request
-`/clusters/17034506/addresses?limit=3&reverse=true`
+`/clusters/1-2-3/addresses?limit=3&reverse=true`
 ### Response
 ``` json
 [
@@ -164,20 +165,22 @@ Indexing the bitcoin blockchain can take more or less than a week depending on y
 </details>
 
 <details>
- <summary>GET /clusters/:id/balance-candlesticks</summary>
+ <summary>GET /clusters/[height-txN-outputN]/balance-candlesticks</summary>
 </details> 
 
 ### Addresses
 <details>
- <summary>GET /addresses/:address/cluster_id</summary>
+ <summary>GET /addresses/[address]/cluster_id</summary>
 
 `/addresses/1AnwDVbwsLBVwRfqN2x9Eo4YEJSPXo2cwG/cluster_id`
+
+**Documentation outdated:** clusterId is now in the form {height, txN, outputN} that refers to first transaction output belonging to a cluster
 ``` json
 17034506
 ```
 </details>
 <details>
- <summary>GET /addresses/:address/transactions</summary>
+ <summary>GET /addresses/[address]/transactions</summary>
 
  ### Query parameters
   * gt, gte, lt, lte (optional)
@@ -186,17 +189,17 @@ Indexing the bitcoin blockchain can take more or less than a week depending on y
 </details>
 
 <details>
- <summary>GET /addresses/:address/balance-candlesticks</summary>
+ <summary>GET /addresses/[address]/balance-candlesticks</summary>
 </details> 
 
 ### Transactions
 <details>
- <summary>GET /transactions/:txid/cluster-balance-changes</summary>
+ <summary>GET /transactions/[txid]/cluster-balance-changes</summary>
 </details>
 
 
 <details>
- <summary>GET /transactions/:txid/details</summary>
+ <summary>GET /transactions/[txid]/details</summary>
 </details>
 
 ### Miscellaneous

@@ -1,3 +1,5 @@
+Archived because I'm not going to maintain this repostiory anymore.
+
 ## CoinClustering
 Address clustering for bitcoin based cryptocurrencies
 
